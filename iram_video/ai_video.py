@@ -379,6 +379,7 @@ class AIVideoEngine:
         out_dir: Path,
         beat_id: str,
         is_shorts: bool = False,
+        is_cinema: bool = False,
         provider: str = "auto",
         global_topic: str = ""
     ) -> Path:
@@ -445,7 +446,7 @@ class AIVideoEngine:
                 return res_img
 
         # Tier 7: Public Domain Stock Archives (Wikimedia Commons, Openverse, Coverr, NASA HD Video/Photos)
-        stock_path = MediaFetcher.fetch_media_for_beat(query, out_dir, beat_id, global_topic=global_topic, is_shorts=is_shorts, beat_data=beat)
+        stock_path = MediaFetcher.fetch_media_for_beat(query, out_dir, beat_id, global_topic=global_topic, is_shorts=is_shorts, is_cinema=is_cinema, beat_data=beat)
         if stock_path.exists() and stock_path.stat().st_size > 5000:
             return stock_path
 

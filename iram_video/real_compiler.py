@@ -34,6 +34,7 @@ class RealVideoCompiler:
         self,
         work_dir: Path,
         is_shorts: bool = False,
+        is_cinema: bool = False,
         provider: str = "auto",
         global_topic: str = "",
         steady_camera: bool = True,
@@ -43,6 +44,7 @@ class RealVideoCompiler:
     ):
         self.work_dir = work_dir
         self.is_shorts = is_shorts
+        self.is_cinema = is_cinema
         self.provider = provider
         self.global_topic = global_topic
         self.steady_camera = steady_camera
@@ -209,7 +211,7 @@ class RealVideoCompiler:
                         continue
 
                 media_path = AIVideoEngine.fetch_or_generate_beat_media(
-                    beat, self.broll_dir, f"{scene_idx:02d}_{b_idx:02d}", is_shorts=self.is_shorts, provider=self.provider, global_topic=self.global_topic
+                    beat, self.broll_dir, f"{scene_idx:02d}_{b_idx:02d}", is_shorts=self.is_shorts, is_cinema=self.is_cinema, provider=self.provider, global_topic=self.global_topic
                 )
                 is_video = media_path.suffix.lower() in [".webm", ".mp4", ".mkv", ".mov"]
                 if is_video:

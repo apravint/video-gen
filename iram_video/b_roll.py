@@ -20,6 +20,7 @@ NEGATIVE_NOISE_TERMS = [
     "bird", "tree", "plant", "forest", "florestal", "fruit", "animal", "cartoon",
     "graffiti", "anime", "toy", "nagaokakyo", "happy bus", "doll", "drawing",
     "illustration", "sketch", "comic", "painting", "clipart", "costume", "cosplay", "mask",
+    "etching", "engraving", "woodcut", "lithograph", "watercolor", "fresco",
     "flower", "season", "festival", "autumn", "summer", "winter", "blossom", "tulip", "cherry blossom",
     "book", "cover", "tarot", "card", "poster", "pamphlet", "sculpture", "figurine", "stamp", "coin",
     "text", "document", "newspaper", "article", "statue", "tombstone", "grave", "manuscript", "plaque",
@@ -955,6 +956,7 @@ class MediaFetcher:
         beat_id: str,
         global_topic: str = "",
         is_shorts: bool = False,
+        is_cinema: bool = False,
         beat_data: Optional[Dict[str, Any]] = None
     ) -> Path:
         """
@@ -985,7 +987,7 @@ class MediaFetcher:
                 and any(w in item.get("title", "").lower() for w in query_words)
             ]
             random.shuffle(p1_items)
-            if is_shorts:
+            if is_shorts or is_cinema:
                 p1_items.sort(key=lambda x: 0 if x.get("type") == "video" else 1)
             for item in p1_items:
                 ext = ".webm" if item["type"] == "video" else ".jpg"
@@ -1003,7 +1005,7 @@ class MediaFetcher:
                 if not _is_url_already_used(item.get("url", ""))
             ]
             random.shuffle(p2_items)
-            if is_shorts:
+            if is_shorts or is_cinema:
                 p2_items.sort(key=lambda x: 0 if x.get("type") == "video" else 1)
             for item in p2_items:
                 ext = ".webm" if item["type"] == "video" else ".jpg"
@@ -1024,9 +1026,10 @@ class MediaFetcher:
             if any(term in clean_q.lower() for term in concrete_tokens):
                 queries_to_try.append(clean_q)
 
+        req_video = is_shorts or is_cinema
         for q in queries_to_try:
             time.sleep(0.1)
-            results = cls.search_media(q, require_video=is_shorts, global_topic=global_topic, is_shorts=is_shorts)
+            results = cls.search_media(q, require_video=req_video, global_topic=global_topic, is_shorts=is_shorts)
             candidates = [
                 item for item in results
                 if not _is_url_already_used(item.get("url", ""))

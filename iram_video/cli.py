@@ -475,6 +475,7 @@ def main():
             real_compiler = RealVideoCompiler(
                 work_dir,
                 is_shorts=is_shorts,
+                is_cinema=is_cinema,
                 provider=generator_prov,
                 global_topic=combined_topic,
                 steady_camera=args.steady_camera,

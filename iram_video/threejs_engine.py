@@ -242,7 +242,9 @@ def launch_3d_studio(port: int = 8995):
         print("🪐 [THREE.JS] Launched IRAM 3D CAD & Mesh Inspector.")
     else:
         # Fallback to local viewer
-        tmp_html = Path("/tmp/iram_video_3d_studio.html")
+        import tempfile
+        tmp_html = Path(tempfile.gettempdir()) / "iram_video_3d_studio.html"
         export_3d_title_scene(str(tmp_html), "IRAM OS THREE.JS STUDIO", "Interactive WebGL 3D Motion Graphics Engine")
-        subprocess.Popen(["xdg-open", str(tmp_html)])
-        print(f"🪐 [THREE.JS] Opened 3D WebGL scene in default browser.")
+        if shutil.which("xdg-open"):
+            subprocess.Popen(["xdg-open", str(tmp_html)])
+        print(f"🪐 [THREE.JS] Opened 3D WebGL scene at: {tmp_html}")

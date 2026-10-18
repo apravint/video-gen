@@ -397,7 +397,8 @@ def preview_voiceover(text: str, voice: str = "jarvis"):
         print(f"🔊 [IRAM VOICE] Playing preview via PipeWire Studio Audio ({voice_slug})...")
         subprocess.run(["iram-voice", "speak", text, "--voice", voice_slug])
     else:
-        tmp = Path("/tmp/iram_voice_preview.mp3")
+        import tempfile
+        tmp = Path(tempfile.gettempdir()) / "iram_voice_preview.mp3"
         generate_voiceover(text, str(tmp), voice=voice)
         if shutil.which("pw-play"):
             subprocess.run(["pw-play", str(tmp)])

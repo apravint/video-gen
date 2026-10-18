@@ -116,19 +116,44 @@ def main():
     parser.add_argument("--api-port", type=int, default=8000, help="FastAPI port (default: 8000)")
     parser.add_argument("--tension", action="store_true", help="Apply drama tension curve analysis and dramatic beat scoring")
     parser.add_argument("--threejs", "--3d", dest="threejs", action="store_true", help="Launch Three.js 3D WebGL motion graphics & kinetic titles studio")
+    parser.add_argument("--export-3d", dest="export_3d", default=None, help="Export a standalone Three.js 3D WebGL motion title scene to specified HTML file")
     parser.add_argument("--harness", action="store_true", help="Run with Harness² cyclic verification loop (Plan -> Act -> Verify -> Reflect)")
+    parser.add_argument("--verify-video", dest="verify_video", default=None, help="Run Harness² cyclic verification audit on an existing MP4 video")
+    parser.add_argument("--preview-voice", dest="preview_voice", action="store_true", help="Preview speech synthesis directly through PipeWire studio audio")
 
     args = parser.parse_args()
 
     if getattr(args, "threejs", False):
         import subprocess
         print("🪐 [THREE.JS] Launching Three.js 3D Motion Graphics Studio...")
-        subprocess.run(["iram-video-3d"])
+        if shutil.which("iram-video-3d"):
+            subprocess.run(["iram-video-3d"])
+        else:
+            from .threejs_engine import launch_3d_studio
+            launch_3d_studio()
         return
 
-    if getattr(args, "harness", False):
+    if getattr(args, "export_3d", None):
+        from .threejs_engine import export_3d_title_scene
+        title = args.prompt or "IRAM OS SOVEREIGN ENGINE"
+        export_3d_title_scene(args.export_3d, title, aspect_ratio="9:16" if args.shorts else "16:9")
+        return
+
+    if getattr(args, "verify_video", None):
+        from .harness_verifier import run_harness_audit
+        run_harness_audit(args.verify_video)
+        return
+
+    if getattr(args, "preview_voice", False):
+        from .voice import preview_voiceover
+        text = args.prompt or "Welcome to IRAM OS Sovereign Video Studio."
+        voice = args.voice or "jarvis"
+        preview_voiceover(text, voice)
+        return
+
+    if getattr(args, "harness", False) and not args.prompt:
         import subprocess
-        task = f"Compile video for topic '{args.prompt or 'IRAM OS Technology'}' with {args.scenes or 'auto'} scenes"
+        task = f"Compile video for IRAM OS Technology"
         print(f"🧠 [HARNESS²] Dispatching cyclic verification loop for video task...")
         subprocess.run(["iram-harness2", task])
         return
@@ -622,6 +647,17 @@ def main():
             print(f"• Thumbnail: {thumb_png}")
         print(f"• Metadata:  {meta_txt}")
         print("="*60 + "\n")
+
+        # 8. Post-Render Harness² Verification Loop
+        if getattr(args, "harness", False):
+            from .harness_verifier import VideoHarnessVerifier
+            print("🧠 [HARNESS²] Dispatching post-render cyclic verification loop (Plan -> Act -> Verify -> Reflect)...")
+            verifier = VideoHarnessVerifier(output_dir=output_mp4.parent / ".harness")
+            verifier.plan_stage(title=video_title, expected_scenes=len(scenes), target_aspect="9:16" if is_shorts else "16:9")
+            report = verifier.verify_stage(output_mp4)
+            healed = verifier.reflect_and_heal(output_mp4, report)
+            if healed != output_mp4 and healed.exists():
+                print(f"🏆 [HARNESS²] Certified release candidate: {healed}")
 
 if __name__ == "__main__":
     main()

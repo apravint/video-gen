@@ -1,4 +1,5 @@
 import asyncio
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Dict, List, Any
@@ -228,6 +229,11 @@ class VoiceSynthesizer:
 
     def synthesize_line(self, text: str, output_file: Path) -> float:
         output_file.parent.mkdir(parents=True, exist_ok=True)
+        # 1. Try sovereign IRAM Voice CLI if available
+        if synthesize_with_iram_voice(text, output_file, voice=self.voice):
+            return self.get_duration(output_file)
+
+        # 2. Try Edge-TTS streaming
         try:
             communicate = edge_tts.Communicate(text, self.voice, rate=self.rate)
             communicate.save_sync(str(output_file))
@@ -352,8 +358,56 @@ class VoiceSynthesizer:
         return max(2.5, round((len(words) / (wpm / 60.0)) + 0.8, 2))
 
 
+def synthesize_with_iram_voice(text: str, output_file: Path, voice: str = "jarvis") -> bool:
+    """Attempts synthesis using IRAM OS VoiceStudio CLI directly."""
+    if not shutil.which("iram-voice"):
+        return False
+    # If full Azure identifier was passed, extract friendly name if possible
+    voice_slug = voice
+    for k, v in VOICE_MAP.items():
+        if v == voice:
+            voice_slug = k
+            break
+
+    cmd = [
+        "iram-voice", "speak",
+        text,
+        "--voice", voice_slug,
+        "--out", str(output_file),
+        "--no-play"
+    ]
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+        if res.returncode == 0 and output_file.exists() and output_file.stat().st_size > 500:
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def preview_voiceover(text: str, voice: str = "jarvis"):
+    """Plays voiceover narration through PipeWire studio audio for previewing before video render."""
+    voice_slug = voice
+    for k, v in VOICE_MAP.items():
+        if v == voice:
+            voice_slug = k
+            break
+
+    if shutil.which("iram-voice"):
+        print(f"🔊 [IRAM VOICE] Playing preview via PipeWire Studio Audio ({voice_slug})...")
+        subprocess.run(["iram-voice", "speak", text, "--voice", voice_slug])
+    else:
+        tmp = Path("/tmp/iram_voice_preview.mp3")
+        generate_voiceover(text, str(tmp), voice=voice)
+        if shutil.which("pw-play"):
+            subprocess.run(["pw-play", str(tmp)])
+        elif shutil.which("ffplay"):
+            subprocess.run(["ffplay", "-nodisp", "-autoexit", str(tmp)])
+
+
 def generate_voiceover(text: str, output_file: str, voice: str = "default") -> float:
     """Helper to synthesize a single line or script text to audio file."""
     synth = VoiceSynthesizer(voice_key=voice)
     return synth.synthesize_line(text, Path(output_file))
+
 

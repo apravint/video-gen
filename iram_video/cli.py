@@ -115,8 +115,23 @@ def main():
     parser.add_argument("--api", "--fastapi", dest="fastapi", action="store_true", help="Launch the decoupled FastAPI REST API & Async Task Queue server")
     parser.add_argument("--api-port", type=int, default=8000, help="FastAPI port (default: 8000)")
     parser.add_argument("--tension", action="store_true", help="Apply drama tension curve analysis and dramatic beat scoring")
+    parser.add_argument("--threejs", "--3d", dest="threejs", action="store_true", help="Launch Three.js 3D WebGL motion graphics & kinetic titles studio")
+    parser.add_argument("--harness", action="store_true", help="Run with Harness² cyclic verification loop (Plan -> Act -> Verify -> Reflect)")
 
     args = parser.parse_args()
+
+    if getattr(args, "threejs", False):
+        import subprocess
+        print("🪐 [THREE.JS] Launching Three.js 3D Motion Graphics Studio...")
+        subprocess.run(["iram-video-3d"])
+        return
+
+    if getattr(args, "harness", False):
+        import subprocess
+        task = f"Compile video for topic '{args.prompt or 'IRAM OS Technology'}' with {args.scenes or 'auto'} scenes"
+        print(f"🧠 [HARNESS²] Dispatching cyclic verification loop for video task...")
+        subprocess.run(["iram-harness2", task])
+        return
 
     if args.fastapi:
         from .api import start_fastapi

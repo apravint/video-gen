@@ -14,11 +14,18 @@ VOICE_MAP = {
     "brian": "en-US-BrianNeural",          # Male English: Casual
     "eric": "en-US-EricNeural",            # Male English: Rational
 
+    # IRAM VoiceStudio Sovereign Personas
+    "jarvis": "en-US-ChristopherNeural",   # Calm, sophisticated AI copilot
+    "samantha": "en-US-JennyNeural",       # Warm, conversationalist
+    "cinema-narrator": "en-US-EricNeural", # Resonant, deep authoritative trailer voice
+    "cyber-synth": "en-US-GuyNeural",      # Glitched energetic vocoded AI
+
     # Tamil Voices (தமிழ்)
     "pallavi": "ta-IN-PallaviNeural",      # Female Tamil: Friendly, positive (Default TA)
     "valluvar": "ta-IN-ValluvarNeural",    # Male Tamil: Friendly, authoritative
     "tamil-female": "ta-IN-PallaviNeural",
-    "tamil-male": "ta-IN-ValluvarNeural"
+    "tamil-male": "ta-IN-ValluvarNeural",
+    "tamil-tech": "ta-IN-PallaviNeural"
 }
 
 
@@ -343,4 +350,10 @@ class VoiceSynthesizer:
         if not words:
             return 3.0
         return max(2.5, round((len(words) / (wpm / 60.0)) + 0.8, 2))
+
+
+def generate_voiceover(text: str, output_file: str, voice: str = "default") -> float:
+    """Helper to synthesize a single line or script text to audio file."""
+    synth = VoiceSynthesizer(voice_key=voice)
+    return synth.synthesize_line(text, Path(output_file))
 

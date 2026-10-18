@@ -21,9 +21,8 @@ from typing import Dict, List, Optional, Tuple, Any
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
-from shorts_creator.sfx import SoundEffectsSynthesizer
-from shorts_creator.tts_engine import generate_voiceover
-from shorts_creator.script_gen import detect_language
+from .sfx import SoundEffectsSynthesizer
+from .voice import generate_voiceover
 
 
 # Default Hardware Presets

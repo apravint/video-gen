@@ -102,13 +102,21 @@ def get_shot_recipe(recipe_key: Optional[str] = None) -> Dict[str, Any]:
     clean_key = recipe_key.lower().strip().replace(" ", "_").replace("-", "_")
     return SHOT_RECIPES.get(clean_key, SHOT_RECIPES["hero_reveal"])
 
-def build_recipe_filter(recipe_key: str, frames: int, w: int, h: int, fps: int = 30) -> str:
+def build_recipe_filter(recipe_key: str, frames: int, w: int, h: int, fps: int = 30, for_video: bool = False) -> str:
     """Renders the exact aspect-ratio adaptive FFmpeg video filtergraph for the selected recipe card."""
     recipe = get_shot_recipe(recipe_key)
     
     # Check orientation and extract the correct scaling string matrix
     is_shorts = h > w
     filter_key = "ffmpeg_filter_portrait" if is_shorts else "ffmpeg_filter_landscape"
+
+    if for_video:
+        vf = recipe.get("video_filter")
+        if vf:
+            return vf
+        raw_filter = recipe.get(filter_key, "") or recipe.get("ffmpeg_filter", "")
+        parts = [p.strip() for p in raw_filter.split(",") if not p.strip().startswith("zoompan")]
+        return ",".join(parts) if parts else ""
     
     raw_filter = recipe.get(filter_key, "")
     if not raw_filter:

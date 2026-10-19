@@ -31,7 +31,7 @@ class CharacterVectorMemory:
     VECTOR_DIM = 512
 
     def __init__(self, storage_dir: Optional[Path] = None):
-        self.storage_dir = Path(storage_dir or "/home/apravint/.local/share/iram-video/character_memory")
+        self.storage_dir = Path(storage_dir or (Path.home() / ".local" / "share" / "iram-video" / "character_memory"))
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         self.client = None
         self._init_qdrant()

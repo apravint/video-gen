@@ -67,7 +67,7 @@ def main():
         prog="iram-video",
         description="Universal Film & Video Engine (Real YouTube Documentary Videos, Animation Feature Films, Cinema Trailers, Shorts & Landscape, English & தமிழ்)."
     )
-    parser.add_argument("prompt", nargs="?", default="", help="Topic, brief, or screenplay premise (English or தமிழ்)")
+    parser.add_argument("prompt", nargs="*", default=[], help="Topic, brief, or screenplay premise (English or தமிழ்)")
     parser.add_argument("--real", "--youtube", "--documentary", "--broll", dest="real", action="store_true", help="Generate as real documentary YouTube video with real 1080p/4K stock B-roll footage, photography, and acoustic score (NO cyberpunk, NO subtitles)")
     parser.add_argument("--subtitles", action="store_true", help="Burn subtitles into the video (disabled by default)")
     parser.add_argument("--no-subtitles", action="store_true", help="Ensure subtitles are completely disabled (default)")
@@ -120,8 +120,17 @@ def main():
     parser.add_argument("--harness", action="store_true", help="Run with Harness² cyclic verification loop (Plan -> Act -> Verify -> Reflect)")
     parser.add_argument("--verify-video", dest="verify_video", default=None, help="Run Harness² cyclic verification audit on an existing MP4 video")
     parser.add_argument("--preview-voice", dest="preview_voice", action="store_true", help="Preview speech synthesis directly through PipeWire studio audio")
+    parser.add_argument("--montage", nargs="?", const="documentary-montage", default=None, help="Execute OpenMontage agentic video production pipeline (e.g. documentary-montage, animated-explainer, clip-factory)")
+    parser.add_argument("--pipeline", dest="pipeline", default="documentary-montage", help="Target OpenMontage pipeline ID (e.g. documentary-montage, animated-explainer, clip-factory)")
+    parser.add_argument("--pipelines", "--list-pipelines", dest="pipelines", action="store_true", help="List all 12 OpenMontage agentic production pipelines")
+    parser.add_argument("--backlot", action="store_true", help="Launch OpenMontage Backlot living storyboard web server")
+    parser.add_argument("--demo", nargs="?", const="code-to-screen", default=None, help="Render a zero-key Remotion motion graphics demo (e.g. code-to-screen, world-in-numbers, focusflow-pitch)")
+    parser.add_argument("--montage-audit", dest="montage_audit", default=None, help="Run OpenMontage multi-point QC audit on a video file")
 
     args = parser.parse_args()
+
+    if isinstance(args.prompt, list):
+        args.prompt = " ".join(args.prompt).strip()
 
     if getattr(args, "threejs", False):
         import subprocess
@@ -149,6 +158,47 @@ def main():
         text = args.prompt or "Welcome to IRAM OS Sovereign Video Studio."
         voice = args.voice or "jarvis"
         preview_voiceover(text, voice)
+        return
+
+    # OpenMontage Integration Handlers
+    if getattr(args, "pipelines", False) or args.prompt == "pipelines":
+        from .montage_bridge import format_pipeline_catalog
+        print(format_pipeline_catalog())
+        return
+
+    if getattr(args, "backlot", False) or args.prompt == "backlot":
+        from .montage_bridge import launch_backlot
+        launch_backlot(port=args.port or 8080)
+        return
+
+    if getattr(args, "montage_audit", None):
+        from .montage_bridge import audit_media
+        res = audit_media(args.montage_audit)
+        print(json.dumps(res, indent=2))
+        return
+
+    if getattr(args, "demo", None) or args.prompt.startswith("demo"):
+        from .montage_bridge import run_demo, list_demos
+        demo_name = args.demo if getattr(args, "demo", None) else (args.prompt.split()[-1] if len(args.prompt.split()) > 1 and args.prompt.split()[-1] != "demo" else "code-to-screen")
+        if demo_name in ("list", "--list"):
+            print("Available zero-key Remotion demos:", ", ".join(list_demos()))
+            return
+        run_demo(demo_name)
+        return
+
+    if getattr(args, "montage", None) or args.prompt.startswith("montage"):
+        pipeline_name = args.pipeline if getattr(args, "pipeline", None) and args.pipeline != "documentary-montage" else (args.montage if args.montage and args.montage != "documentary-montage" else "documentary-montage")
+        prompt_text = args.prompt
+        if prompt_text.startswith("montage"):
+            prompt_text = prompt_text[7:].strip() or "The History of Open Source and Computing"
+        from .montage_bridge import format_pipeline_catalog, is_montage_available
+        print(f"🎬 [OPENMONTAGE] Selected Pipeline: '{pipeline_name}'")
+        print(f"📝 Prompt: \"{prompt_text}\"")
+        if not is_montage_available():
+            print("⚠️ OpenMontage repository is not initialized. Run setup in ~/OpenMontage.")
+            return
+        print(f"✓ OpenMontage Agentic Engine active at ~/OpenMontage")
+        print(f"To direct this production, use: iram video montage \"{prompt_text}\" --pipeline {pipeline_name}")
         return
 
     if getattr(args, "harness", False) and not args.prompt:

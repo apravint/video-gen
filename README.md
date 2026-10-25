@@ -3,8 +3,25 @@
 An autonomous, production-grade video generation engine that transforms **any natural language prompt, technical codebase, or screenplay into broadcast-quality 1080p MP4 videos, YouTube Shorts, cinema trailers, and animated short films**.
 
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-27%20passed-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-69%20passed-brightgreen.svg)](tests/)
+[![CI](https://github.com/apravint/video-gen/actions/workflows/ci.yml/badge.svg)](https://github.com/apravint/video-gen/actions)
 [![Bilingual](https://img.shields.io/badge/languages-English%20%7C%20%E0%AE%A4%E0%AE%AE%E0%AE%BF%E0%AE%B4%E0%AF%8D-purple.svg)]()
+
+---
+
+## 📦 Installation
+
+```bash
+git clone https://github.com/apravint/video-gen.git
+cd video-gen
+
+# Install in editable mode:
+pip install -e .
+
+# Verify CLI binaries are installed:
+video-gen --help
+iram-video --help
+```
 
 ---
 
@@ -51,6 +68,7 @@ Screenplay & Shotcraft         Neural Voice Engine      Visual Synthesis Hub
    - **Tencent HunyuanVideo**: 13B open video DiT with cinema-grade motion fluidity.
    - **Zhipu CogVideoX**: Spatial-temporal expert transformer video generator.
    - **NVIDIA Sana**: Linear DiT for ultra-fast, high-resolution keyframe rendering.
+   - **HeyGen Hyperframes Engine**: Declarative HTML5/CSS3/GSAP motion graphics compiled directly into deterministic 60fps MP4 video clips.
 2. **Shotcraft Recipe Cards (`--recipe`)**:
    - 12 production-ready cinematic shot recipes with camera and lens physics: `hero_reveal`, `macro_orbit`, `speed_ramp`, `isometric_exploded`, `dutch_angle_tension`, `terminal_glitch_scan`, `split_comparison`, `broll_whip_pan`.
 3. **Digital Human & LivePortrait Talking Avatars (`--avatar`)**:
@@ -110,7 +128,8 @@ video-gen "Ancient temple at sunrise" --generator hunyuan
 | `--brag` | Inspect a local codebase/repo and build a developer launch showcase | `None` |
 | `--recipe` | Shotcraft cinematic recipe card (`hero_reveal`, `speed_ramp`, `macro_orbit`, etc.) | `None` |
 | `--avatar` | Path to portrait image for digital human talking avatar PiP | `None` |
-| `--generator` | Generative video backend (`auto`, `veo`, `wan2.2`, `hunyuan`, `cogvideo`, `sana`, `stock`) | `auto` |
+| `--generator` | Generative video backend (`auto`, `veo`, `wan2.2`, `hunyuan`, `cogvideo`, `sana`, `hyperframes`, `stock`) | `auto` |
+| `--hyperframes` | Render declarative HTML5/CSS/GSAP scenes via HeyGen Hyperframes engine | `False` |
 | `--shorts` | Compile as vertical 9:16 (1080x1920) with retention progress bar | `False` |
 | `--cinema` | Compile as 24 FPS 2.39:1 Hollywood trailer with 35mm film grain | `False` |
 | `--real` | Real documentary YouTube video with authentic stock & acoustic score | `False` |

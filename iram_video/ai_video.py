@@ -406,6 +406,30 @@ class AIVideoEngine:
 
         prov = provider.lower().strip()
 
+        # Tier 0: HeyGen Hyperframes (Agentic HTML/CSS/GSAP Motion Graphics)
+        if prov in ("hyperframes", "html", "heygen"):
+            try:
+                from .hyperframes_engine import HyperframesEngine
+                hf_res = HyperframesEngine.render_template(
+                    beat.get("hyperframes_template", "kinetic_quote"),
+                    {
+                        "TITLE": query,
+                        "QUOTE": phrase,
+                        "AUTHOR": global_topic or "IRAM Video Engine",
+                        "CODE": phrase,
+                        "LABEL_1": "Performance", "VAL_1": "100%", "CHANGE_1": "2.4x",
+                        "LABEL_2": "Throughput", "VAL_2": "60 FPS", "CHANGE_2": "1.8x",
+                        "LABEL_3": "Precision", "VAL_3": "99.9%", "CHANGE_3": "0.5%",
+                    },
+                    target_mp4,
+                    duration=duration,
+                    is_shorts=is_shorts
+                )
+                if hf_res and hf_res.exists() and hf_res.stat().st_size > 1000:
+                    return hf_res
+            except Exception as e:
+                print(f"   ⚠️ [Hyperframes Engine Error] {e}")
+
         # Tier 1: Google Veo 3.1 / 2.0
         if prov in ("auto", "veo", "google"):
             res = cls.generate_with_google_veo(ai_prompt, target_mp4, duration, is_shorts)

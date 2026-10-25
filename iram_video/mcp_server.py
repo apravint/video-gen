@@ -105,6 +105,23 @@ TOOLS_METADATA = [
             },
             "required": ["number", "unit", "headline", "out_path"]
         }
+    },
+    {
+        "name": "render_hyperframes_scene",
+        "description": "Renders a declarative HTML/CSS/GSAP scene into a 60fps MP4 video clip using the HeyGen Hyperframes engine.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "template": {"type": "string", "enum": ["code_walkthrough", "metric_dashboard", "kinetic_quote"], "default": "kinetic_quote", "description": "Hyperframes motion template."},
+                "title": {"type": "string", "description": "Title or headline for the scene."},
+                "quote_or_code": {"type": "string", "description": "The quote text, narration, or code snippet to animate."},
+                "author": {"type": "string", "default": "IRAM Video", "description": "Author attribution or subtitle."},
+                "duration": {"type": "number", "default": 5.0, "description": "Duration in seconds."},
+                "is_shorts": {"type": "boolean", "default": False, "description": "True for 9:16 vertical video."},
+                "output_path": {"type": "string", "description": "Optional destination path for the output MP4."}
+            },
+            "required": ["quote_or_code"]
+        }
     }
 ]
 
@@ -200,6 +217,33 @@ class MCPServer:
             is_sh = bool(args.get("is_shorts", False))
             MotionCanvas.render_metric_card(beat, out_p, duration=dur, is_shorts=is_sh)
             return {"status": "ok", "out_path": str(out_p), "duration": dur}
+
+        elif tool_name == "render_hyperframes_scene":
+            from .hyperframes_engine import HyperframesEngine
+            tmpl = args.get("template", "kinetic_quote")
+            title = args.get("title", "Hyperframes Showcase")
+            text = args.get("quote_or_code", "")
+            author = args.get("author", "IRAM Video")
+            dur = float(args.get("duration", 5.0))
+            is_sh = bool(args.get("is_shorts", False))
+            out_p = Path(args.get("output_path") or "/tmp/mcp_hyperframes_output.mp4").resolve()
+
+            res = HyperframesEngine.render_template(
+                tmpl,
+                {
+                    "TITLE": title,
+                    "QUOTE": text,
+                    "CODE": text,
+                    "AUTHOR": author,
+                    "LABEL_1": "Performance", "VAL_1": "100%", "CHANGE_1": "2.4x",
+                    "LABEL_2": "Throughput", "VAL_2": "60 FPS", "CHANGE_2": "1.8x",
+                    "LABEL_3": "Precision", "VAL_3": "99.9%", "CHANGE_3": "0.5%",
+                },
+                out_p,
+                duration=dur,
+                is_shorts=is_sh
+            )
+            return {"status": "ok", "out_path": str(res), "duration": dur}
 
         elif tool_name == "extend_video":
             prev_v = Path(args["previous_video"]).resolve()

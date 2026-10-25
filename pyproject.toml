@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "video-gen"
+version = "2.1.0"
+description = "Universal High-Quality Video, Film & Hyperframes AI Engine (English & Tamil)"
+readme = "README.md"
+authors = [
+    { name = "Pravin", email = "apravin.t@gmail.com" }
+]
+license = { text = "MIT" }
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Multimedia :: Graphics",
+    "Topic :: Multimedia :: Sound/Audio",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+keywords = [
+    "video-generation", "ai-video", "veo", "hyperframes", "wan2.1", "ffmpeg",
+    "tamil-tts", "edge-tts", "kinetic-subtitles", "cinema", "youtube-shorts"
+]
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn>=0.28.0",
+    "pydantic>=2.6.0",
+    "pillow>=10.0.0",
+    "numpy>=1.24.0",
+    "edge-tts>=6.1.10",
+    "google-genai>=0.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "httpx>=0.27.0",
+]
+
+[project.scripts]
+video-gen = "iram_video.cli:main"
+iram-video = "iram_video.cli:main"
+
+[tool.setuptools]
+packages = ["iram_video"]
+
+[tool.setuptools.package-data]
+iram_video = []
+"*" = ["assets/fonts/*.ttf"]

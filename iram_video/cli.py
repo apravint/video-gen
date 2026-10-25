@@ -100,8 +100,9 @@ def main():
     parser.add_argument("--transition", default="fade", choices=["fade", "dissolve", "wipeleft", "wiperight", "slideleft", "slideright", "smoothleft", "circlecrop", "fadeblack", "fadewhite", "cut", "none"], help="Cinematic transition between scenes (default: fade)")
     parser.add_argument("--grade", default="auto", choices=["auto", "clean", "documentary", "cinematic", "vintage", "noir", "vibrant", "none"], help="Cinematic color grading preset (default: auto)")
     parser.add_argument("--no-thumbnail", action="store_true", help="Skip thumbnail generation")
-    parser.add_argument("--generator", default="auto", choices=["auto", "veo", "wan", "wan2", "wan2.1", "wan2.2", "hunyuan", "cogvideo", "sana", "fal", "replicate", "kling", "stock"], help="Video generator model hub")
+    parser.add_argument("--generator", default="auto", choices=["auto", "veo", "wan", "wan2", "wan2.1", "wan2.2", "hunyuan", "cogvideo", "sana", "fal", "replicate", "kling", "stock", "hyperframes", "html", "heygen"], help="Video generator model hub")
     parser.add_argument("--veo", dest="generator_veo", action="store_true", help="Prioritize Google Veo 3.1 / 2.0 generative video synthesis")
+    parser.add_argument("--hyperframes", dest="generator_hyperframes", action="store_true", help="Render declarative HTML5/CSS/GSAP scenes via HeyGen Hyperframes engine")
     parser.add_argument("--ai-video", dest="ai_video", action="store_true", help="Enable AI generative video synthesis with automatic multi-tier fallback")
     parser.add_argument("--subtitle-palette", default="auto", choices=["auto", "gold", "hormozi", "neon-cyan", "neon-green", "fire-red", "purple", "white"], help="Subtitle color palette")
     parser.add_argument("--recipe", choices=list(SHOT_RECIPES.keys()), default=None, help="Cinematic shotcraft recipe card")
@@ -326,7 +327,10 @@ def main():
             is_cinema = True
 
     generator_prov = args.generator
-    if args.generator_veo:
+    if getattr(args, "generator_hyperframes", False):
+        generator_prov = "hyperframes"
+        is_real = True
+    elif args.generator_veo:
         generator_prov = "veo"
         is_real = True
     elif args.ai_video:

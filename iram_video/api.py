@@ -12,6 +12,7 @@ import json
 import sqlite3
 import logging
 import threading
+from contextlib import closing
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
@@ -80,31 +81,31 @@ class VideoTaskQueue:
     def _init_db(self):
         try:
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
-            with sqlite3.connect(str(self.db_path)) as conn:
-                conn.execute("PRAGMA journal_mode=WAL;")
-                conn.execute("""
-                    CREATE TABLE IF NOT EXISTS video_tasks (
-                        task_id TEXT PRIMARY KEY,
-                        status TEXT,
-                        progress REAL,
-                        current_step TEXT,
-                        created_at TEXT,
-                        start_time REAL,
-                        elapsed_seconds REAL,
-                        request_json TEXT,
-                        output_filename TEXT,
-                        output_url TEXT,
-                        error TEXT,
-                        logs_json TEXT
-                    )
-                """)
-                conn.commit()
+            with closing(sqlite3.connect(str(self.db_path))) as conn:
+                with conn:
+                    conn.execute("PRAGMA journal_mode=WAL;")
+                    conn.execute("""
+                        CREATE TABLE IF NOT EXISTS video_tasks (
+                            task_id TEXT PRIMARY KEY,
+                            status TEXT,
+                            progress REAL,
+                            current_step TEXT,
+                            created_at TEXT,
+                            start_time REAL,
+                            elapsed_seconds REAL,
+                            request_json TEXT,
+                            output_filename TEXT,
+                            output_url TEXT,
+                            error TEXT,
+                            logs_json TEXT
+                        )
+                    """)
         except Exception as e:
             logger.warning(f"Could not initialize SQLite tasks database: {e}")
 
     def _load_tasks_from_db(self):
         try:
-            with sqlite3.connect(str(self.db_path)) as conn:
+            with closing(sqlite3.connect(str(self.db_path))) as conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.execute("SELECT * FROM video_tasks ORDER BY created_at DESC LIMIT 500")
                 for row in cursor.fetchall():
@@ -134,27 +135,27 @@ class VideoTaskQueue:
             return
         t = self.tasks[task_id]
         try:
-            with sqlite3.connect(str(self.db_path)) as conn:
-                conn.execute("""
-                    INSERT INTO video_tasks (
-                        task_id, status, progress, current_step, created_at, start_time,
-                        elapsed_seconds, request_json, output_filename, output_url, error, logs_json
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(task_id) DO UPDATE SET
-                        status=excluded.status,
-                        progress=excluded.progress,
-                        current_step=excluded.current_step,
-                        elapsed_seconds=excluded.elapsed_seconds,
-                        output_filename=excluded.output_filename,
-                        output_url=excluded.output_url,
-                        error=excluded.error,
-                        logs_json=excluded.logs_json
-                """, (
-                    t["task_id"], t["status"], t["progress"], t["current_step"], t["created_at"],
-                    t["start_time"], t["elapsed_seconds"], json.dumps(t.get("request", {})),
-                    t.get("output_filename"), t.get("output_url"), t.get("error"), json.dumps(t.get("logs", []))
-                ))
-                conn.commit()
+            with closing(sqlite3.connect(str(self.db_path))) as conn:
+                with conn:
+                    conn.execute("""
+                        INSERT INTO video_tasks (
+                            task_id, status, progress, current_step, created_at, start_time,
+                            elapsed_seconds, request_json, output_filename, output_url, error, logs_json
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(task_id) DO UPDATE SET
+                            status=excluded.status,
+                            progress=excluded.progress,
+                            current_step=excluded.current_step,
+                            elapsed_seconds=excluded.elapsed_seconds,
+                            output_filename=excluded.output_filename,
+                            output_url=excluded.output_url,
+                            error=excluded.error,
+                            logs_json=excluded.logs_json
+                    """, (
+                        t["task_id"], t["status"], t["progress"], t["current_step"], t["created_at"],
+                        t["start_time"], t["elapsed_seconds"], json.dumps(t.get("request", {})),
+                        t.get("output_filename"), t.get("output_url"), t.get("error"), json.dumps(t.get("logs", []))
+                    ))
         except Exception:
             pass
 

@@ -112,7 +112,10 @@ def main():
     parser.add_argument("--extend", default=None, help="Continuous scene extension mode: path to previous MP4 video to chain and extend")
     parser.add_argument("--image", "--start-image", dest="start_image", default=None, help="Image-to-Video storyboarding: path to seed starting image/photo")
     parser.add_argument("--brag", default=None, help="Repository-to-video mode: auto-inspect a codebase/git repository and craft a developer launch showcase")
-    parser.add_argument("--avatar", default=None, help="Digital human talking avatar mode: pass a portrait image to composite talking presenter")
+    parser.add_argument("--avatar", nargs="?", const="auto", default=None, help="Digital human talking avatar mode: pass a portrait image or 'auto' for PersonaLive real-time animation")
+    parser.add_argument("--face", dest="face_img", default=None, help="Reference face portrait image path for avatar generation")
+    parser.add_argument("--drive", dest="drive_media", default=None, help="Driving video or motion guidance path for PersonaLive avatar")
+    parser.add_argument("--avatar-engine", dest="avatar_engine", choices=["personalive", "auto", "procedural"], default="auto", help="Avatar rendering engine (default: auto)")
     parser.add_argument("--api", "--fastapi", dest="fastapi", action="store_true", help="Launch the decoupled FastAPI REST API & Async Task Queue server")
     parser.add_argument("--api-port", type=int, default=8000, help="FastAPI port (default: 8000)")
     parser.add_argument("--tension", action="store_true", help="Apply drama tension curve analysis and dramatic beat scoring")
@@ -159,6 +162,37 @@ def main():
         text = args.prompt or "Welcome to IRAM OS Sovereign Video Studio."
         voice = args.voice or "jarvis"
         preview_voiceover(text, voice)
+        return
+
+    is_standalone_avatar = args.prompt.startswith("avatar") or (
+        args.avatar and not args.prompt and not args.real and not args.film and not args.cinema
+    )
+    if is_standalone_avatar:
+        face = args.face_img or (args.avatar if args.avatar != "auto" else None)
+        if not face:
+            demo_ref = Path("/home/apravint/PersonaLive/demo/ref_image.png")
+            if demo_ref.exists():
+                face = str(demo_ref)
+            else:
+                print("Error: Please provide reference face image via --face <path>")
+                return
+
+        output_path = Path(args.output or "avatar_output.mp4")
+        drive = Path(args.drive_media) if args.drive_media else None
+        audio = Path(args.bg_music) if args.bg_music else None
+
+        print(f"🎬 [AVATAR] Generating avatar animation using engine: {args.avatar_engine}...")
+        try:
+            res_path = AvatarEngine.render_talking_head(
+                face_img=Path(face),
+                out_path=output_path,
+                driving_video=drive,
+                audio_path=audio,
+                engine=args.avatar_engine
+            )
+            print(f"✅ [AVATAR] Finished: {res_path}")
+        except Exception as e:
+            print(f"⚠️ [AVATAR] Processing note: {e}")
         return
 
     # OpenMontage Integration Handlers

@@ -163,4 +163,119 @@ class AcceleratedAvatarEngine:
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return output_video_path
 
+    @classmethod
+    def generate_personalive_avatar(
+        cls,
+        avatar_img_path: Path,
+        out_video_path: Path,
+        driving_video_path: Optional[Path] = None,
+        speech_audio_path: Optional[Path] = None,
+        width: int = 512,
+        height: int = 512,
+        device: str = "auto",
+        stream_gen: bool = True,
+    ) -> Path:
+        """Invokes GVCLab/PersonaLive streamable portrait diffusion framework."""
+        personalive_root = Path(os.environ.get("PERSONALIVE_DIR", "/home/apravint/PersonaLive"))
+        if not personalive_root.exists() or not (personalive_root / "inference_offline.py").exists():
+            raise FileNotFoundError(f"PersonaLive not found at {personalive_root}")
+
+        out_video_path = Path(out_video_path).resolve()
+        out_video_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if not driving_video_path and not speech_audio_path:
+            demo_video = personalive_root / "demo" / "driving_video.mp4"
+            if demo_video.exists():
+                driving_video_path = demo_video
+
+        py_bin = personalive_root / ".venv/bin/python"
+        py_exec = str(py_bin) if py_bin.exists() else sys.executable
+
+        actual_device = device
+        if actual_device == "auto":
+            actual_device = "cuda" if (shutil.which("nvidia-smi") or os.environ.get("CUDA_VISIBLE_DEVICES")) else "cpu"
+
+        cmd = [
+            py_exec,
+            str(personalive_root / "inference_offline.py"),
+            "--reference_image", str(Path(avatar_img_path).resolve()),
+            "-W", str(width),
+            "-H", str(height),
+            "--device", actual_device,
+        ]
+        if driving_video_path and Path(driving_video_path).exists():
+            cmd.extend(["--driving_video", str(Path(driving_video_path).resolve())])
+        if stream_gen:
+            cmd.extend(["--stream_gen", "True"])
+
+        print(f"🎬 [PERSONALIVE] Generating real-time portrait animation for: {avatar_img_path.name}...")
+        res = subprocess.run(cmd, cwd=str(personalive_root), capture_output=True, text=True)
+        if res.returncode != 0:
+            print(f"⚠️ [PERSONALIVE] Note/Warning: {res.stderr[-300:] if res.stderr else res.stdout[-300:]}")
+            if speech_audio_path and Path(speech_audio_path).exists():
+                duration = 5.0
+                try:
+                    probe_out = subprocess.check_output(
+                        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(speech_audio_path)],
+                        text=True
+                    )
+                    duration = float(probe_out.strip())
+                except Exception:
+                    pass
+                return cls.create_talking_avatar_video(avatar_img_path, speech_audio_path, out_video_path, duration)
+            raise RuntimeError(f"PersonaLive failed (code {res.returncode}): {res.stderr}")
+
+        # Check saved_results
+        saved_dir = personalive_root / "saved_results"
+        if saved_dir.exists():
+            mp4s = sorted(saved_dir.glob("**/*.mp4"), key=os.path.getmtime, reverse=True)
+            if mp4s:
+                shutil.copy2(mp4s[0], out_video_path)
+                return out_video_path
+
+        return out_video_path
+
+    @classmethod
+    def render_talking_head(
+        cls,
+        face_img: Path,
+        out_path: Path,
+        audio_path: Optional[Path] = None,
+        driving_video: Optional[Path] = None,
+        engine: str = "auto",
+        width: int = 512,
+        height: int = 512,
+    ) -> Path:
+        """Unified entry point for talking head creation."""
+        personalive_root = Path(os.environ.get("PERSONALIVE_DIR", "/home/apravint/PersonaLive"))
+        has_personalive = personalive_root.exists() and (personalive_root / "inference_offline.py").exists()
+
+        if engine == "personalive" or (engine == "auto" and has_personalive):
+            try:
+                return cls.generate_personalive_avatar(
+                    avatar_img_path=face_img,
+                    out_video_path=out_path,
+                    driving_video_path=driving_video,
+                    speech_audio_path=audio_path,
+                    width=width,
+                    height=height,
+                )
+            except Exception as e:
+                print(f"⚠️ [AVATAR] PersonaLive fallback triggered: {e}")
+
+        # Fallback to procedural
+        if audio_path and Path(audio_path).exists():
+            duration = 5.0
+            try:
+                probe_out = subprocess.check_output(
+                    ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(audio_path)],
+                    text=True
+                )
+                duration = float(probe_out.strip())
+            except Exception:
+                pass
+            return cls.create_talking_avatar_video(face_img, audio_path, out_path, duration, width, height)
+
+        raise ValueError("Must provide either valid PersonaLive configuration or audio_path for fallback avatar.")
+
 AvatarEngine = AcceleratedAvatarEngine

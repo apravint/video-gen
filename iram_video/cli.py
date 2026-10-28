@@ -63,6 +63,22 @@ def load_prompt_from_json(json_path: Path):
 from .templates import VIDEO_TEMPLATES, get_template
 
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] in ("clip", "autoclip"):
+        import shutil, subprocess
+        autoclip_bin = shutil.which("autoclip") or os.path.expanduser("~/.local/bin/autoclip")
+        if not os.path.exists(autoclip_bin):
+            print("Error: autoclip not found. Check ~/.local/bin/autoclip or ~/autoclip.", file=sys.stderr)
+            sys.exit(1)
+        os.execv(autoclip_bin, [autoclip_bin, "clip"] + sys.argv[2:])
+
+    if len(sys.argv) > 1 and sys.argv[1] in ("clip-studio", "autoclip-serve"):
+        import shutil, subprocess
+        autoclip_bin = shutil.which("autoclip") or os.path.expanduser("~/.local/bin/autoclip")
+        if not os.path.exists(autoclip_bin):
+            print("Error: autoclip not found. Check ~/.local/bin/autoclip or ~/autoclip.", file=sys.stderr)
+            sys.exit(1)
+        os.execv(autoclip_bin, [autoclip_bin, "serve"] + sys.argv[2:])
+
     parser = argparse.ArgumentParser(
         prog="iram-video",
         description="Universal Film & Video Engine (Real YouTube Documentary Videos, Animation Feature Films, Cinema Trailers, Shorts & Landscape, English & தமிழ்)."

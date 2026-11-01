@@ -12,8 +12,8 @@ from urllib.parse import urlparse, parse_qs
 
 from iram_video.soundscape import SoundscapeAdvisor
 
-RESOURCES_DIR = Path(os.getenv("IRAM_RESOURCES_DIR", "/home/apravint/resources"))
-OUTPUTS_DIR = Path(os.getenv("IRAM_OUTPUTS_DIR", "/home/apravint"))
+RESOURCES_DIR = Path(os.getenv("IRAM_RESOURCES_DIR", Path.home() / "resources"))
+OUTPUTS_DIR = Path(os.getenv("IRAM_OUTPUTS_DIR", Path.home()))
 UPLOAD_DIR = Path(os.getenv("IRAM_UPLOAD_DIR", "/tmp/iram_uploads"))
 
 HTML_DASHBOARD = """<!DOCTYPE html>

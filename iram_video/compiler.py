@@ -1,20 +1,9 @@
 import math
-import subprocess
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from .characters import CharacterRenderer
-from .subtitles import KineticSubtitleGenerator
 from .transitions import TransitionEngine
-from .color_grade import get_color_grade_filter
-
-STANDARD_BT709_ARGS = [
-    "-pix_fmt", "yuv420p",
-    "-colorspace", "bt709",
-    "-color_primaries", "bt709",
-    "-color_trc", "bt709",
-    "-color_range", "tv",
-    "-x264-params", "colorprim=bt709:transfer=bt709:colormatrix=bt709",
-]
+from .mastering import master_video, resolve_dimensions, run_ffmpeg
 
 class VideoCompiler:
     def __init__(self, work_dir: Path, is_cinema: bool = False, is_shorts: bool = False, character: Optional[str] = None, aspect_ratio: str = "16:9", is_4k: bool = False):
@@ -61,6 +50,7 @@ class VideoCompiler:
         out_clip = self.clips_dir / f"{sid}.mp4"
 
         framerate = 24 if self.is_cinema else 30
+        width, height = resolve_dimensions(self.aspect_ratio, self.is_shorts, self.is_4k)
         fade_out = max(0, duration - 0.4)
 
         # Build sequential filter graph
@@ -70,10 +60,7 @@ class VideoCompiler:
         # 1. Base motion (Cinematic subtle steady push-in)
         if self.is_cinema:
             d_frames = int(duration * framerate) + 48
-            if self.is_shorts:
-                fc_parts.append(f"{cur_v}zoompan=z='min(zoom+0.0002,1.03)':d={d_frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps={framerate}[v_bg]")
-            else:
-                fc_parts.append(f"{cur_v}zoompan=z='min(zoom+0.0002,1.03)':d={d_frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1920x1080:fps={framerate}[v_bg]")
+            fc_parts.append(f"{cur_v}zoompan=z='min(zoom+0.0002,1.03)':d={d_frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height}:fps={framerate}[v_bg]")
             cur_v = "[v_bg]"
 
         # 2. Character overlay
@@ -89,27 +76,28 @@ class VideoCompiler:
                 "-framerate", "8",
                 "-i", str(self.sprites_dir / "sprite_%02d.png")
             ])
-            pos_x = 680 if self.is_shorts else 1500
-            pos_y = 1440 if self.is_shorts else 540
+            pos_x = width - (400 if self.is_shorts else 420)
+            pos_y = height - (480 if self.is_shorts else 540)
             fc_parts.append(f"{cur_v}[1:v]overlay={pos_x}:{pos_y}[v_char]")
             cur_v = "[v_char]"
 
         # 3. Cinema post-processing: 2.39:1 Anamorphic letterbox, color grading & film grain
         post_filters = []
         if self.is_cinema:
-            if not self.is_shorts:
-                # Hollywood 2.39:1 scope bars (top and bottom 138px bars)
-                post_filters.append("drawbox=y=0:h=138:color=black:t=fill")
-                post_filters.append("drawbox=y=942:h=138:color=black:t=fill")
-            else:
+            if width > height and width / height < 2.0:
+                # Hollywood 2.39:1 scope bars on a 16:9 frame; a 2.39:1 frame is already scope
+                bar_h = (height - int(width / 2.39)) // 2
+                post_filters.append(f"drawbox=y=0:h={bar_h}:color=black:t=fill")
+                post_filters.append(f"drawbox=y=ih-{bar_h}:h={bar_h}:color=black:t=fill")
+            elif self.is_shorts:
                 # Scope accent bars for vertical video
                 post_filters.append("drawbox=y=0:h=90:color=black:t=fill")
-                post_filters.append("drawbox=y=1830:h=90:color=black:t=fill")
+                post_filters.append("drawbox=y=ih-90:h=90:color=black:t=fill")
 
             # Teal & Orange cinematic color matrix
             post_filters.append("colorbalance=rs=0.08:gs=-0.04:bs=-0.08:rm=-0.04:gm=0.0:bm=0.12:rh=-0.04:gh=0.04:bh=0.18")
             # 35mm analog film grain (smooth gaussian noise)
-            post_filters.append("noise=alls=3:allf=g")
+            post_filters.append("noise=alls=3:allf=t")
 
         # 4. Fade in/out
         post_filters.append(f"fade=t=in:st=0:d=0.35,fade=t=out:st={fade_out:.2f}:d=0.35")
@@ -151,7 +139,7 @@ class VideoCompiler:
             str(out_clip)
         ]
 
-        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        run_ffmpeg(cmd)
         return out_clip
 
     def compile(
@@ -181,76 +169,19 @@ class VideoCompiler:
             work_dir=self.work_dir
         )
 
-        total_duration = sum(float(s.get("duration", 4.0)) for s in scenes)
-
-        # Prepare Post-Filters: Kinetic Subtitles, Color Grading & Retention Progress Bar
-        v_filters = []
-
-        cg_filter = get_color_grade_filter(color_grade)
-        if cg_filter and cg_filter != "null":
-            v_filters.append(cg_filter)
-
-        if self.is_shorts:
-            # 1. Shorts retention progress bar (14px track + clean neutral white fill along bottom)
-            v_filters.append("drawbox=x=0:y=1906:w=iw:h=14:color=black@0.45:t=fill")
-            v_filters.append(f"drawbox=x=0:y=1906:w='min(iw,iw*(t/{max(0.1, total_duration):.2f}))':h=14:color=white@0.85:t=fill")
-
-        if burn_subtitles:
-            ass_path = self.work_dir / "kinetic_subtitles.ass"
-            KineticSubtitleGenerator.generate_ass(scenes, ass_path, is_shorts=self.is_shorts, language=language, palette_key=palette_key)
-            if ass_path.exists():
-                ass_escaped = str(ass_path).replace("\\", "/").replace(":", "\\:")
-                fonts_dir = Path(__file__).parent.parent / "assets" / "fonts"
-                if fonts_dir.exists():
-                    fonts_dir_escaped = str(fonts_dir).replace("\\", "/").replace(":", "\\:")
-                    v_filters.append(f"ass=filename={ass_escaped}:fontsdir={fonts_dir_escaped}:shaping=1")
-                else:
-                    v_filters.append(f"ass={ass_escaped}")
-
-        # Broadcast Studio Audio Mastering (EBU R128 + Vocal Presence EQ + BGM Low-pass Ducking)
-        music_vol = max(0.02, min(1.0, float(music_volume)))
-        filter_complex_list = []
-        maps = []
-
-        if v_filters:
-            filter_complex_list.append(f"[0:v]{','.join(v_filters)},setsar=1,format=yuv420p[vout]")
-            maps.extend(["-map", "[vout]"])
-            video_codec_args = ["-c:v", "libx264", "-preset", "medium", "-crf", "18", "-b:v", "15M", "-maxrate", "20M", "-bufsize", "30M", *STANDARD_BT709_ARGS]
-        else:
-            filter_complex_list.append("[0:v]setsar=1,format=yuv420p[vout]")
-            maps.extend(["-map", "[vout]"])
-            video_codec_args = ["-c:v", "libx264", "-preset", "medium", "-crf", "18", "-b:v", "15M", "-maxrate", "20M", "-bufsize", "30M", *STANDARD_BT709_ARGS]
-
-        if bg_music and bg_music.exists():
-            filter_complex_list.append(
-                f"[0:a]highpass=f=80,equalizer=f=3200:t=q:w=1.2:g=2.5[voice_raw];"
-                f"[voice_raw]loudnorm=I=-15:TP=-1.5:LRA=9[voice_master];"
-                f"[1:a]lowpass=f=4000,volume={music_vol:.2f}[bg_clean];"
-                f"[bg_clean][voice_master]sidechaincompress=threshold=0.08:ratio=5:attack=80:release=380[ducked];"
-                f"[voice_master][ducked]amix=inputs=2:duration=first:dropout_transition=2,loudnorm=I=-14:LRA=7:TP=-1.5[aout]"
-            )
-            maps.extend(["-map", "[aout]"])
-            audio_inputs = ["-i", str(bg_music)]
-        else:
-            filter_complex_list.append(
-                "[0:a]highpass=f=80,equalizer=f=3200:t=q:w=1.2:g=2.5,loudnorm=I=-14:LRA=7:TP=-1.5[aout]"
-            )
-            maps.extend(["-map", "[aout]"])
-            audio_inputs = []
-
-        cmd_mix = [
-            "ffmpeg", "-y",
-            "-i", str(raw_concat),
-            *audio_inputs,
-            "-filter_complex", ";".join(filter_complex_list),
-            *maps,
-            *video_codec_args,
-            "-c:a", "aac",
-            "-b:a", "320k",
-            "-ac", "2",
-            "-ar", "48000",
-            "-movflags", "+faststart",
-            str(final_output)
-        ]
-
-        subprocess.run(cmd_mix, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        width, height = resolve_dimensions(self.aspect_ratio, self.is_shorts, self.is_4k)
+        master_video(
+            raw_concat,
+            final_output,
+            scenes,
+            self.work_dir,
+            width,
+            height,
+            is_shorts=self.is_shorts,
+            bg_music=bg_music,
+            music_volume=music_volume,
+            burn_subtitles=burn_subtitles,
+            language=language,
+            palette_key=palette_key,
+            color_grade=color_grade,
+        )

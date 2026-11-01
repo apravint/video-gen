@@ -12,7 +12,7 @@ import subprocess
 import sys
 from typing import Any, Dict, List, Optional
 
-OPENMONTAGE_ROOT = Path("/home/apravint/OpenMontage")
+OPENMONTAGE_ROOT = Path.home() / "OpenMontage"
 VENV_PYTHON = OPENMONTAGE_ROOT / ".venv/bin/python"
 
 

@@ -1,5 +1,4 @@
 import math
-import subprocess
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
@@ -7,20 +6,10 @@ from .b_roll import MediaFetcher
 from .audio_synth import synthesize_mood_track
 from .ai_video import AIVideoEngine
 from .motion_canvas import MotionCanvas, classify_semantic_beat
-from .subtitles import KineticSubtitleGenerator
 from .transitions import TransitionEngine
-from .color_grade import get_color_grade_filter
+from .mastering import STANDARD_BT709_ARGS, master_video, resolve_dimensions, run_ffmpeg
 from .state_machine import StateMachineAssetBuilder, AssetRenderState
 from .soundscape_mixer import SoundscapeMixer
-
-STANDARD_BT709_ARGS = [
-    "-pix_fmt", "yuv420p",
-    "-colorspace", "bt709",
-    "-color_primaries", "bt709",
-    "-color_trc", "bt709",
-    "-color_range", "tv",
-    "-x264-params", "colorprim=bt709:transfer=bt709:colormatrix=bt709",
-]
 
 class RealVideoCompiler:
     """
@@ -57,20 +46,15 @@ class RealVideoCompiler:
         self.shots_dir.mkdir(parents=True, exist_ok=True)
         self.state_machine = StateMachineAssetBuilder(self.work_dir / "checkpoints", max_retries=3, resume=True)
 
-        if aspect_ratio == "1:1":
-            self.w, self.h = (2160, 2160) if is_4k else (1080, 1080)
-        elif aspect_ratio == "9:16" or is_shorts:
-            self.w, self.h = (2160, 3840) if is_4k else (1080, 1920)
-        elif aspect_ratio == "2.39:1":
-            self.w, self.h = (3840, 1608) if is_4k else (2560, 1072)
-        else:
-            self.w, self.h = (3840, 2160) if is_4k else (1920, 1080)
+        self.w, self.h = resolve_dimensions(aspect_ratio, is_shorts, is_4k)
+        # MotionCanvas cards render at 1920x1080 only; other frames would break the stream-copy concat.
+        self.motion_cards = (self.w, self.h) == (1920, 1080)
 
     def _render_single_shot(self, beat: Dict[str, Any], duration: float, audio_file: Path, out_shot: Path, scene_idx: int) -> Path:
         beat_type = beat.get("beat_type", "real_media")
         query = beat.get("query") or beat.get("phrase") or self.global_topic or "documentary landscape"
 
-        if not self.is_shorts and beat_type in ("metric_card", "route_map", "code_card", "listicle_card", "step_card", "comparison_card"):
+        if self.motion_cards and beat_type in ("metric_card", "route_map", "code_card", "listicle_card", "step_card", "comparison_card"):
             tmp_video = self.shots_dir / f"tmp_single_{scene_idx:02d}.mp4"
             if beat_type == "metric_card":
                 MotionCanvas.render_metric_card(beat, tmp_video, duration=duration, is_shorts=self.is_shorts)
@@ -96,7 +80,7 @@ class RealVideoCompiler:
                 "-t", f"{duration:.3f}",
                 str(out_shot)
             ]
-            subprocess.run(cmd_mux, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            run_ffmpeg(cmd_mux)
             return out_shot
 
         media_path = AIVideoEngine.fetch_or_generate_beat_media(
@@ -162,7 +146,7 @@ class RealVideoCompiler:
                 str(out_shot)
             ]
 
-        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        run_ffmpeg(cmd)
         return out_shot
 
     def render_shot(self, scene: Dict[str, Any], scene_idx: int) -> Path:
@@ -184,7 +168,7 @@ class RealVideoCompiler:
                 b_dur = float(beat["duration"])
                 beat_clip_path = self.shots_dir / f"beat_{scene_idx:02d}_{b_idx:02d}.mp4"
                 beat_type = beat.get("beat_type", "real_media")
-                if not self.is_shorts:
+                if self.motion_cards:
                     if beat_type == "metric_card":
                         MotionCanvas.render_metric_card(beat, beat_clip_path, duration=b_dur, is_shorts=self.is_shorts)
                         beat_clips.append(beat_clip_path)
@@ -230,7 +214,7 @@ class RealVideoCompiler:
                         f"format=yuv420p[v]"
                     )
                     cmd = ["ffmpeg", "-y", "-loop", "1", "-i", str(media_path), "-filter_complex", fc, "-map", "[v]", "-c:v", "libx264", "-preset", "medium", "-crf", "18", *STANDARD_BT709_ARGS, "-t", f"{b_dur:.3f}", "-an", str(beat_clip_path)]
-                subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                run_ffmpeg(cmd)
                 beat_clips.append(beat_clip_path)
 
             concat_txt = self.shots_dir / f"scene_{scene_idx:02d}_concat.txt"
@@ -239,10 +223,10 @@ class RealVideoCompiler:
                     f.write(f"file '{bc.resolve()}'\n")
             raw_scene_video = self.shots_dir / f"scene_{scene_idx:02d}_raw_video.mp4"
             cmd_cat = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(concat_txt), "-c", "copy", str(raw_scene_video)]
-            subprocess.run(cmd_cat, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            run_ffmpeg(cmd_cat)
 
             cmd_mux = ["ffmpeg", "-y", "-i", str(raw_scene_video), "-i", str(audio_file), "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-t", f"{duration:.3f}", str(out_shot)]
-            subprocess.run(cmd_mux, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            run_ffmpeg(cmd_mux)
             return out_shot
 
         def _fallback_render() -> Path:
@@ -302,99 +286,47 @@ class RealVideoCompiler:
             work_dir=self.work_dir
         )
 
-        # Prepare Video Post-Filters: Retention Progress Bar, Color Grading & Kinetic Subtitles
-        v_filters = []
-
-        # Color grading preset
-        cg_filter = get_color_grade_filter(color_grade)
-        if cg_filter and cg_filter != "null":
-            v_filters.append(cg_filter)
-
-        if self.is_shorts and total_duration > 0:
-            # 1. Shorts retention progress bar (14px track + clean neutral white fill along bottom)
-            v_filters.append("drawbox=x=0:y=1906:w=iw:h=14:color=black@0.45:t=fill")
-            v_filters.append(f"drawbox=x=0:y=1906:w='min(iw,iw*(t/{max(0.1, total_duration):.2f}))':h=14:color=white@0.85:t=fill")
-
-        if burn_subtitles:
-            ass_path = self.work_dir / "real_subtitles.ass"
-            KineticSubtitleGenerator.generate_ass(scenes, ass_path, is_shorts=self.is_shorts, language=language, palette_key=palette_key)
-            if ass_path.exists():
-                ass_escaped = str(ass_path).replace("\\", "/").replace(":", "\\:")
-                fonts_dir = Path(__file__).parent.parent / "assets" / "fonts"
-                if fonts_dir.exists():
-                    fonts_dir_escaped = str(fonts_dir).replace("\\", "/").replace(":", "\\:")
-                    v_filters.append(f"ass=filename={ass_escaped}:fontsdir={fonts_dir_escaped}:shaping=1")
-                else:
-                    v_filters.append(f"ass={ass_escaped}")
-
-        # Broadcast Studio Audio Mastering (EBU R128 + Vocal Presence EQ + BGM Low-pass Ducking)
-        filter_complex_list = []
-        maps = []
-
-        if v_filters:
-            filter_complex_list.append(f"[0:v]{','.join(v_filters)},setsar=1,format=yuv420p[vout]")
-            maps.extend(["-map", "[vout]"])
-            video_codec_args = ["-c:v", "libx264", "-preset", "medium", "-crf", "18", "-b:v", "15M", "-maxrate", "20M", "-bufsize", "30M", *STANDARD_BT709_ARGS]
-        else:
-            filter_complex_list.append("[0:v]setsar=1,format=yuv420p[vout]")
-            maps.extend(["-map", "[vout]"])
-            video_codec_args = ["-c:v", "libx264", "-preset", "medium", "-crf", "18", "-b:v", "15M", "-maxrate", "20M", "-bufsize", "30M", *STANDARD_BT709_ARGS]
         if soundscape_playlist and total_duration > 0:
-            layered_soundscape_wav = self.work_dir / "soundscape_mixed_bg.wav"
-            primary_amb = soundscape_playlist[0].get("type", "room_tone") if soundscape_playlist else "room_tone"
-            amb_path = self.work_dir / "ambient_layer.wav"
-            SoundscapeMixer.generate_procedural_ambient(primary_amb, total_duration + 5.0, amb_path)
-            if bg_music and bg_music.exists():
-                cmd_premix = [
-                    "ffmpeg", "-y",
-                    "-i", str(bg_music),
-                    "-stream_loop", "-1", "-i", str(amb_path),
-                    "-filter_complex", "[0:a]volume=1.0[bg];[1:a]volume=0.35[amb];[bg][amb]amix=inputs=2:duration=first:dropout_transition=2[outm]",
-                    "-map", "[outm]",
-                    "-c:a", "pcm_s16le",
-                    "-t", f"{total_duration + 2.0:.2f}",
-                    str(layered_soundscape_wav)
-                ]
-                try:
-                    subprocess.run(cmd_premix, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    if layered_soundscape_wav.exists() and layered_soundscape_wav.stat().st_size > 1000:
-                        bg_music = layered_soundscape_wav
-                except Exception:
-                    pass
-            else:
-                bg_music = amb_path
+            bg_music = self._layer_soundscape(soundscape_playlist, bg_music, total_duration)
 
-        if bg_music and bg_music.exists():
-            vol_val = max(0.02, min(1.0, float(music_volume)))
-            filter_complex_list.append(
-                f"[0:a]highpass=f=80,equalizer=f=3200:t=q:w=1.2:g=2.5[voice_raw];"
-                f"[voice_raw]loudnorm=I=-15:TP=-1.5:LRA=9[voice_master];"
-                f"[1:a]lowpass=f=4000,volume={vol_val:.2f}[bg_clean];"
-                f"[bg_clean][voice_master]sidechaincompress=threshold=0.08:ratio=5:attack=80:release=380[ducked];"
-                f"[voice_master][ducked]amix=inputs=2:duration=first:dropout_transition=2,loudnorm=I=-14:LRA=7:TP=-1.5[aout]"
-            )
-            maps.extend(["-map", "[aout]"])
-            audio_inputs = ["-i", str(bg_music)]
-        else:
-            filter_complex_list.append(
-                "[0:a]highpass=f=80,equalizer=f=3200:t=q:w=1.2:g=2.5,loudnorm=I=-14:LRA=7:TP=-1.5[aout]"
-            )
-            maps.extend(["-map", "[aout]"])
-            audio_inputs = []
+        master_video(
+            raw_concat,
+            output_path,
+            scenes,
+            self.work_dir,
+            self.w,
+            self.h,
+            is_shorts=self.is_shorts,
+            bg_music=bg_music,
+            music_volume=music_volume,
+            burn_subtitles=burn_subtitles,
+            language=language,
+            palette_key=palette_key,
+            color_grade=color_grade,
+        )
 
-        cmd_mix = [
+    def _layer_soundscape(self, soundscape_playlist: List[Dict[str, Any]], bg_music: Optional[Path], total_duration: float) -> Optional[Path]:
+        """Mixes the ambient layer under the music track, or uses it alone when there is no music."""
+        layered_soundscape_wav = self.work_dir / "soundscape_mixed_bg.wav"
+        primary_amb = soundscape_playlist[0].get("type", "room_tone")
+        amb_path = self.work_dir / "ambient_layer.wav"
+        SoundscapeMixer.generate_procedural_ambient(primary_amb, total_duration + 5.0, amb_path)
+        if not (bg_music and bg_music.exists()):
+            return amb_path
+        cmd_premix = [
             "ffmpeg", "-y",
-            "-i", str(raw_concat),
-            *audio_inputs,
-            "-filter_complex", ";".join(filter_complex_list),
-            *maps,
-            *video_codec_args,
-            "-c:a", "aac",
-            "-b:a", "320k",
-            "-ac", "2",
-            "-ar", "48000",
-            "-movflags", "+faststart",
-            str(output_path)
+            "-stream_loop", "-1", "-i", str(bg_music),
+            "-stream_loop", "-1", "-i", str(amb_path),
+            "-filter_complex", "[0:a]volume=1.0[bg];[1:a]volume=0.35[amb];[bg][amb]amix=inputs=2:duration=first:dropout_transition=2[outm]",
+            "-map", "[outm]",
+            "-c:a", "pcm_s16le",
+            "-t", f"{total_duration + 2.0:.2f}",
+            str(layered_soundscape_wav)
         ]
-
-        subprocess.run(cmd_mix, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            run_ffmpeg(cmd_premix)
+            if layered_soundscape_wav.exists() and layered_soundscape_wav.stat().st_size > 1000:
+                return layered_soundscape_wav
+        except RuntimeError as e:
+            print(f"   ⚠️ Could not layer ambient sound: {e}")
+        return bg_music

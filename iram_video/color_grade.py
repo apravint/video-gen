@@ -25,7 +25,7 @@ COLOR_GRADE_PRESETS = {
     "vintage": {
         "name": "35mm Analog Subtle",
         "description": "Subtle analog film texture with natural colors.",
-        "ffmpeg_filter": "eq=contrast=0.98:saturation=0.96,noise=alls=3:allf=g,format=yuv420p"
+        "ffmpeg_filter": "eq=contrast=0.98:saturation=0.96,noise=alls=3:allf=t,format=yuv420p"
     },
     "noir": {
         "name": "Dramatic Monochrome",
@@ -36,6 +36,16 @@ COLOR_GRADE_PRESETS = {
         "name": "Vibrant Promo & Tech",
         "description": "High-impact punchy colors with heightened contrast for marketing and launch showcases.",
         "ffmpeg_filter": "eq=contrast=1.04:saturation=1.08,format=yuv420p"
+    },
+    "editorial": {
+        "name": "Broadcast Editorial",
+        "description": "Slightly cool, firm contrast for news and journalism.",
+        "ffmpeg_filter": "eq=contrast=1.05:saturation=0.98,colorbalance=bm=0.02:rm=-0.01,format=yuv420p"
+    },
+    "warm_editorial": {
+        "name": "Warm Editorial",
+        "description": "Soft warm tones for conversation, food, travel and lifestyle.",
+        "ffmpeg_filter": "eq=contrast=1.02:saturation=1.05,colorbalance=rm=0.03:bm=-0.03,format=yuv420p"
     },
     "none": {
         "name": "Passthrough (Original)",

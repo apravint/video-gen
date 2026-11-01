@@ -17,6 +17,7 @@ class AIVideoEngine:
     Tier 4: Public Domain Media Archives (Wikimedia Commons & NASA 4K/8K Video/Photos)
     Tier 5: Documentary Motion Canvas (Ken Burns Dynamic Push/Pull/Pan)
     """
+    local_library = None
 
     _veo_quota_exhausted: bool = False
 
@@ -399,6 +400,10 @@ class AIVideoEngine:
         start_img = beat.get("start_image")
         if start_img and Path(start_img).exists():
             return Path(start_img)
+
+        # User-supplied footage (--media) takes priority over every network source
+        if cls.local_library:
+            return cls.local_library.pick(f"{query} {phrase}")
 
         # Check cached AI video
         if target_mp4.exists() and target_mp4.stat().st_size > 10000:

@@ -2,12 +2,14 @@ import argparse
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 import random
 import tempfile
 from pathlib import Path
 
-from .director import Director
+from .director import Director, DirectorUnavailable
 from .voice import VoiceSynthesizer
 from .renderer import SlideRenderer, is_tamil_text
 from .audio_synth import synthesize_mood_track
@@ -22,6 +24,9 @@ from .avatar import AvatarEngine
 from .brag import BragHarvester, ViralHookGenerator
 from .drama import CharacterAnchorRegistry, DramaTensionCurve
 from .ai_video import AIVideoEngine
+from .color_grade import COLOR_GRADE_PRESETS
+from .script_import import LocalMediaLibrary, load_screenplay_file
+from .transitions import TransitionEngine
 
 def slugify(text: str) -> str:
     clean = re.sub(r"[^\w\s-]", "", text, flags=re.UNICODE).strip().lower()
@@ -60,11 +65,23 @@ def load_prompt_from_json(json_path: Path):
     style = f"Technical and architectural deep-dive based on {json_path.name}"
     return prompt, style
 
-from .templates import VIDEO_TEMPLATES, get_template
+from .templates import VIDEO_TEMPLATES, get_template, list_templates
 
 def main():
+    try:
+        run()
+    except (DirectorUnavailable, RuntimeError, ValueError, OSError, subprocess.CalledProcessError) as e:
+        sys.stdout.flush()
+        print(f"❌ {e}", file=sys.stderr)
+        sys.exit(1)
+
+def write_screenplay(screenplay, path: Path):
+    """Saves a screenplay as editable JSON that --script can render later."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(screenplay, indent=2, ensure_ascii=False), encoding="utf-8")
+
+def run():
     if len(sys.argv) > 1 and sys.argv[1] in ("clip", "autoclip"):
-        import shutil, subprocess
         autoclip_bin = shutil.which("autoclip") or os.path.expanduser("~/.local/bin/autoclip")
         if not os.path.exists(autoclip_bin):
             print("Error: autoclip not found. Check ~/.local/bin/autoclip or ~/autoclip.", file=sys.stderr)
@@ -72,7 +89,6 @@ def main():
         os.execv(autoclip_bin, [autoclip_bin, "clip"] + sys.argv[2:])
 
     if len(sys.argv) > 1 and sys.argv[1] in ("clip-studio", "autoclip-serve"):
-        import shutil, subprocess
         autoclip_bin = shutil.which("autoclip") or os.path.expanduser("~/.local/bin/autoclip")
         if not os.path.exists(autoclip_bin):
             print("Error: autoclip not found. Check ~/.local/bin/autoclip or ~/autoclip.", file=sys.stderr)
@@ -103,7 +119,15 @@ def main():
     parser.add_argument("--bg-music", default=None, help="Custom background music track file path (MP3, WAV, AAC)")
     parser.add_argument("--music-volume", type=float, default=0.20, help="Background music volume ducking level (default: 0.20)")
     parser.add_argument("--style", default=None, help="Style hint for the director (e.g. 'documentary', 'realistic', 'vox style', 'educational')")
-    parser.add_argument("--template", choices=list(VIDEO_TEMPLATES.keys()), default=None, help="Video genre template ('explainer', 'tutorial', 'listicle', 'comparison', 'news', 'promo', 'podcast')")
+    parser.add_argument("--template", choices=list(VIDEO_TEMPLATES.keys()), default=None, help="Video genre template. See --list-templates")
+    parser.add_argument("--list-templates", action="store_true", help="List every video genre template and exit")
+    parser.add_argument("--script", default=None, help="Use your own words: a plain-text script (blank lines separate scenes, '# Heading' names one) or a screenplay JSON. Needs no LLM")
+    parser.add_argument("--plan", default=None, metavar="FILE.json", help="Write the screenplay to an editable JSON file and stop. Render it later with --script")
+    parser.add_argument("--duration", type=float, default=None, metavar="SECONDS", help="Target video length in seconds (approximate, set through narration length)")
+    parser.add_argument("--media", default=None, metavar="DIR", help="Use your own images and clips from this folder instead of stock or AI footage. Filenames matching the narration are preferred")
+    parser.add_argument("--no-voice", dest="no_voice", action="store_true", help="No narration: visuals and music only")
+    parser.add_argument("--graphics", action="store_true", help="Render designed slides instead of footage, even if the topic looks like a documentary")
+    parser.add_argument("--offline", action="store_true", help="If Gemini is unavailable, accept a generic placeholder script that is not about your topic")
     parser.add_argument("--tutorial", action="store_true", help="Shortcut for --template tutorial")
     parser.add_argument("--listicle", action="store_true", help="Shortcut for --template listicle")
     parser.add_argument("--comparison", action="store_true", help="Shortcut for --template comparison")
@@ -111,10 +135,10 @@ def main():
     parser.add_argument("--promo", action="store_true", help="Shortcut for --template promo")
     parser.add_argument("--explainer", action="store_true", help="Shortcut for --template explainer")
     parser.add_argument("--podcast", action="store_true", help="Shortcut for --template podcast")
-    parser.add_argument("--aspect-ratio", "--ratio", dest="aspect_ratio", default="auto", choices=["auto", "16:9", "9:16", "1:1", "2.39:1"], help="Video aspect ratio (default: auto, 16:9 or 9:16 for shorts)")
+    parser.add_argument("--aspect-ratio", "--ratio", dest="aspect_ratio", default="auto", choices=["auto", "16:9", "9:16", "1:1", "4:5", "2.39:1"], help="Video aspect ratio (default: auto, 16:9 or 9:16 for shorts)")
     parser.add_argument("--4k", dest="is_4k", action="store_true", help="Render in 4K UHD high resolution")
     parser.add_argument("--transition", default="fade", choices=["fade", "dissolve", "wipeleft", "wiperight", "slideleft", "slideright", "smoothleft", "circlecrop", "fadeblack", "fadewhite", "cut", "none"], help="Cinematic transition between scenes (default: fade)")
-    parser.add_argument("--grade", default="auto", choices=["auto", "clean", "documentary", "cinematic", "vintage", "noir", "vibrant", "none"], help="Cinematic color grading preset (default: auto)")
+    parser.add_argument("--grade", default="auto", choices=["auto", *COLOR_GRADE_PRESETS.keys()], help="Cinematic color grading preset (default: auto)")
     parser.add_argument("--no-thumbnail", action="store_true", help="Skip thumbnail generation")
     parser.add_argument("--generator", default="auto", choices=["auto", "veo", "wan", "wan2", "wan2.1", "wan2.2", "hunyuan", "cogvideo", "sana", "fal", "replicate", "kling", "stock", "hyperframes", "html", "heygen"], help="Video generator model hub")
     parser.add_argument("--veo", dest="generator_veo", action="store_true", help="Prioritize Google Veo 3.1 / 2.0 generative video synthesis")
@@ -152,8 +176,12 @@ def main():
     if isinstance(args.prompt, list):
         args.prompt = " ".join(args.prompt).strip()
 
+    if args.list_templates:
+        for t in list_templates():
+            print(f"{t['key']:<12} {t['description']}")
+        return
+
     if getattr(args, "threejs", False):
-        import subprocess
         print("🪐 [THREE.JS] Launching Three.js 3D Motion Graphics Studio...")
         if shutil.which("iram-video-3d"):
             subprocess.run(["iram-video-3d"])
@@ -253,7 +281,6 @@ def main():
         return
 
     if getattr(args, "harness", False) and not args.prompt:
-        import subprocess
         task = f"Compile video for IRAM OS Technology"
         print(f"🧠 [HARNESS²] Dispatching cyclic verification loop for video task...")
         subprocess.run(["iram-harness2", task])
@@ -317,6 +344,30 @@ def main():
         args.prompt = f"{args.prompt} Shotcraft Camera Direction: {recipe_data['name']} ({recipe_data['description']})."
         print(f"🎬 [SHOTCRAFT RECIPE] Applied: \"{recipe_data['name']}\" ({recipe_data['lens']}, {recipe_data['lighting']})")
 
+    # Author-supplied screenplay replaces the LLM entirely
+    authored_screenplay = None
+    if args.script:
+        if args.film:
+            print("❌ --script is not supported with --film yet. Remove --film to render your script.", file=sys.stderr)
+            sys.exit(1)
+        script_file = Path(args.script).resolve()
+        if not script_file.exists():
+            print(f"❌ Script not found: {script_file}", file=sys.stderr)
+            sys.exit(1)
+        authored_screenplay = load_screenplay_file(script_file, title=args.prompt or None)
+        args.prompt = args.prompt or authored_screenplay["video_title"]
+        print(f"📜 [SCRIPT] Using your screenplay \"{script_file.name}\" ({len(authored_screenplay['scenes'])} scenes)")
+
+    if args.media:
+        media_dir = Path(args.media).resolve()
+        if not media_dir.is_dir():
+            print(f"❌ Media folder not found: {media_dir}", file=sys.stderr)
+            sys.exit(1)
+        AIVideoEngine.local_library = LocalMediaLibrary(media_dir)
+        print(f"🗂️  [MEDIA] Using {len(AIVideoEngine.local_library.files)} files from {media_dir}")
+        if not args.prompt:
+            args.prompt = media_dir.name.replace("-", " ").replace("_", " ")
+
     if not args.prompt:
         parser.print_help()
         sys.exit(1)
@@ -324,7 +375,10 @@ def main():
     # Detect language
     lang = args.lang.lower()
     if lang == "auto":
-        lang = "ta" if is_tamil_text(args.prompt) else "en"
+        lang_probe = args.prompt
+        if authored_screenplay:
+            lang_probe += " ".join(s["narration"] for s in authored_screenplay["scenes"])
+        lang = "ta" if is_tamil_text(lang_probe) else "en"
     elif lang in ["tamil", "ta"]:
         lang = "ta"
     else:
@@ -391,6 +445,10 @@ def main():
     doc_triggers = [r"\breal\b", r"\bdocumentary\b", r"\bhistory\b", r"\bnature\b", r"\bscience\b", r"\bhow to\b"]
     if not is_film and not is_cinema and (args.real or any(re.search(pat, p_low) for pat in doc_triggers)):
         is_real = True
+    if args.media:
+        is_real = True
+    if args.graphics:
+        is_real = False
 
     # Color grading preset
     color_grade = args.grade
@@ -538,10 +596,12 @@ def main():
         slides_dir.mkdir(parents=True, exist_ok=True)
 
         # 1. Direct with Google Gemini (Shorts-aware & Bilingual)
-        print(f"🧠 [1/5] Directing screenplay with Google Gemini 3.8 Flash ({format_label})...")
-        director = Director()
-        try:
-            screenplay = director.direct(
+        if authored_screenplay:
+            print(f"🧠 [1/5] Using your screenplay as written ({format_label})...")
+            screenplay = authored_screenplay
+        else:
+            print(f"🧠 [1/5] Directing screenplay with Google Gemini ({format_label})...")
+            screenplay = Director().direct(
                 args.prompt,
                 scene_count=args.scenes,
                 style_hint=args.style,
@@ -550,11 +610,15 @@ def main():
                 is_cinema=is_cinema,
                 is_real=is_real,
                 character=character,
-                template=selected_template
+                template=selected_template,
+                duration_sec=args.duration,
+                allow_offline=args.offline
             )
-        except Exception as e:
-            print(f"❌ Failed to direct screenplay with Google Gemini: {e}")
-            sys.exit(1)
+
+        if args.plan:
+            write_screenplay(screenplay, Path(args.plan).resolve())
+            print(f"📝 Screenplay saved: {args.plan}\nEdit it, then render with: video-gen --script {args.plan}")
+            return
 
         video_title = screenplay.get("video_title", args.prompt[:60])
         if is_shorts and "#Shorts" not in video_title and "#shorts" not in video_title:
@@ -575,6 +639,13 @@ def main():
                     chosen_voice = random.choice(["christopher", "guy", "eric"])
                 else:
                     chosen_voice = random.choice(["aria", "christopher", "jenny", "guy", "eric"])
+
+        if args.no_voice:
+            pace = (args.duration / len(scenes)) if args.duration else None
+            for s in scenes:
+                s["duration"] = s.get("duration") or pace or VoiceSynthesizer.estimate_audio_duration(s.get("narration", ""))
+                s["narration"] = ""
+            burn_subtitles = False
 
         print(f"🎙️  [2/5] Synthesizing neural voiceover ({lang_display})...")
         voice_synth = VoiceSynthesizer(voice_key=chosen_voice, language=lang, rate=rate)
@@ -715,7 +786,6 @@ def main():
                         position="bottom_right"
                     )
                     if composite_output.exists() and composite_output.stat().st_size > 10000:
-                        import shutil
                         shutil.move(str(composite_output), str(output_mp4))
                         print(f"✓ [DIGITAL HUMAN] Avatar presenter successfully composited onto master video")
 
@@ -736,17 +806,20 @@ def main():
             f.write(f"DESCRIPTION:\n{yt_meta.get('description', '')}\n\n")
             f.write("CHAPTERS:\n")
             curr_sec = 0.0
+            # Transitions overlap scenes, so chapter starts come earlier than the summed durations
+            final_duration = TransitionEngine.get_clip_duration(output_mp4)
+            chapter_overlap = max(0.0, total_duration - final_duration) / max(1, len(scenes) - 1)
             for s in scenes:
                 mins = int(curr_sec // 60)
                 secs = int(curr_sec % 60)
                 f.write(f"{mins}:{secs:02d} {s.get('heading', '')}\n")
-                curr_sec += s["duration"]
+                curr_sec += s["duration"] - chapter_overlap
             f.write(f"\nTAGS:\n{', '.join(tags)}\n")
         print(f"📋 YOUTUBE METADATA: {meta_txt}")
 
         print("\n" + "="*60)
         print(f"✅ Video creation complete ({format_label})!")
-        print(f"• Video:     {output_mp4} ({total_duration:.1f}s)")
+        print(f"• Video:     {output_mp4} ({final_duration:.1f}s)")
         if not args.no_thumbnail:
             print(f"• Thumbnail: {thumb_png}")
         print(f"• Metadata:  {meta_txt}")

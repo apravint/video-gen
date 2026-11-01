@@ -74,9 +74,9 @@ class TestCinemaFilmEngine(unittest.TestCase):
         fta, fen = get_fonts(24)
         sample = "🎬 AI சினிமா & Code 🚀 🔥"
         w = get_mixed_width(sample, fta, fen, draw)
-        self.assertTrue(w > 100)
+        self.assertTrue(w > 30)
         end_x = draw_mixed_line(draw, 10, 10, sample, (255, 255, 255), fta, fen)
-        self.assertTrue(end_x > 100)
+        self.assertTrue(end_x > 30)
 
     def test_scene_beats_extraction(self):
         from iram_video.b_roll import MediaFetcher

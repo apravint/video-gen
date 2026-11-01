@@ -30,7 +30,7 @@ jobs:
       - name: Install System Multimedia Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg fonts-dejavu-core
+          sudo apt-get install -y ffmpeg fonts-dejavu-core fonts-noto-color-emoji fonts-noto-core
 
       - name: Install Python Package & Dependencies
         run: |

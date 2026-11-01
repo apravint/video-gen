@@ -1,7 +1,7 @@
 """
 Video Template & Genre Architecture for IRAM Video.
 Provides structured directorial blueprints, pacing curves, layout sequences,
-and visual formatting rules for 7 universal video genres:
+and visual formatting rules for universal video genres, including:
 - explainer: Standard deep-dive documentary (Vox, Kurzgesagt, Veritasium)
 - tutorial: Step-by-step educational guide with practical milestones
 - listicle: High-retention countdown (#5 through #1) with rank badges
@@ -163,6 +163,149 @@ VIDEO_TEMPLATES = {
             "- Scene 2: Unpacking the underlying insight with conversational depth.\n"
             "- Scene 3: Memorable takeaway and invitation to hear the full episode.\n"
             "- Tone: Intimate, spontaneous, conversational, thought-provoking."
+        )
+    },
+    "story": {
+        "name": "Narrated Story",
+        "description": "Fiction or true story with a beginning, turning point and resolution, told by a narrator.",
+        "default_scenes": 6,
+        "default_music": "cinematic",
+        "default_grade": "cinematic",
+        "is_real": True,
+        "structure": [],
+        "director_directive": (
+            "TEMPLATE: NARRATED STORY.\n"
+            "- Open in the middle of a concrete moment with a character the viewer can picture.\n"
+            "- Build through a want, an obstacle and a turning point to a resolution that pays off the opening.\n"
+            "- Use on-screen text sparingly; show places and actions in the visual beats.\n"
+            "- Tone: Immersive storytelling, in the genre the prompt implies."
+        )
+    },
+    "kids": {
+        "name": "Kids & Learning",
+        "description": "Cheerful, simple, age-appropriate learning video with repetition and big visuals.",
+        "default_scenes": 5,
+        "default_music": "lofi",
+        "default_grade": "vibrant",
+        "structure": [],
+        "director_directive": (
+            "TEMPLATE: KIDS & LEARNING.\n"
+            "- Use short sentences and everyday words for young children. Teach one idea per scene.\n"
+            "- Repeat the key idea, ask a simple question and pause for the child to answer.\n"
+            "- Use a bright, friendly palette and keep content gentle and age-appropriate.\n"
+            "- Tone: Warm, playful, patient."
+        )
+    },
+    "travel": {
+        "name": "Travel & Places",
+        "description": "Destination film built on atmosphere, local detail and practical tips.",
+        "default_scenes": 5,
+        "default_music": "acoustic",
+        "default_grade": "warm_editorial",
+        "is_real": True,
+        "structure": [],
+        "director_directive": (
+            "TEMPLATE: TRAVEL & PLACES.\n"
+            "- Open with the single most striking view or feeling of the place.\n"
+            "- Each scene covers one specific spot, dish or experience, with sensory detail.\n"
+            "- Close with practical advice: when to go and what to skip.\n"
+            "- Tone: Curious, warm, first-hand. Do not invent prices, opening hours or other facts you are unsure of."
+        )
+    },
+    "recipe": {
+        "name": "Recipe & Cooking",
+        "description": "Clear cooking walkthrough from ingredients to the finished dish.",
+        "default_scenes": 5,
+        "default_music": "acoustic",
+        "default_grade": "warm_editorial",
+        "is_real": True,
+        "structure": [],
+        "director_directive": (
+            "TEMPLATE: RECIPE & COOKING.\n"
+            "- Scene 1: The finished dish and why it is worth making.\n"
+            "- Scene 2: Ingredients with exact quantities on a card.\n"
+            "- Middle scenes: One cooking step per scene with times, temperatures and visual cues of doneness.\n"
+            "- Final scene: Serving suggestion and the most common mistake to avoid.\n"
+            "- Tone: Friendly, precise, appetizing."
+        )
+    },
+    "fitness": {
+        "name": "Fitness & Workout",
+        "description": "Guided routine with named exercises, form cues and timing.",
+        "default_scenes": 5,
+        "default_music": "energetic",
+        "default_grade": "vibrant",
+        "is_real": True,
+        "structure": [],
+        "director_directive": (
+            "TEMPLATE: FITNESS & WORKOUT.\n"
+            "- State who the routine is for and what equipment is needed.\n"
+            "- One exercise per scene with sets or duration, the key form cue and an easier variation.\n"
+            "- Finish with a cool-down, and advise stopping if anything hurts.\n"
+            "- Tone: Encouraging, direct, energetic."
+        )
+    },
+    "review": {
+        "name": "Product Review",
+        "description": "Honest review covering first impressions, real use, flaws and a verdict.",
+        "default_scenes": 5,
+        "default_music": "corporate",
+        "default_grade": "clean",
+        "is_real": True,
+        "structure": [],
+        "director_directive": (
+            "TEMPLATE: PRODUCT REVIEW.\n"
+            "- Lead with the verdict in one sentence, then earn it.\n"
+            "- Cover what it does well, where it falls short, and who should not buy it.\n"
+            "- Only state specs and measurements you are confident of, and never claim hands-on testing you cannot back up.\n"
+            "- Tone: Candid, balanced, specific."
+        )
+    },
+    "history": {
+        "name": "History Documentary",
+        "description": "Chronological account of people and events, with causes and consequences.",
+        "default_scenes": 6,
+        "default_music": "documentary",
+        "default_grade": "vintage",
+        "is_real": True,
+        "structure": [],
+        "director_directive": (
+            "TEMPLATE: HISTORY DOCUMENTARY.\n"
+            "- Open on one decisive moment, then step back to explain how it came about.\n"
+            "- Anchor each scene with a date, a place and a named person.\n"
+            "- Separate established fact from interpretation, and say where historians disagree.\n"
+            "- Tone: Measured, vivid, accurate."
+        )
+    },
+    "motivation": {
+        "name": "Motivational Message",
+        "description": "Short, sincere reflection built on one idea and one concrete action.",
+        "default_scenes": 4,
+        "default_music": "cinematic",
+        "default_grade": "cinematic",
+        "is_real": True,
+        "structure": [],
+        "director_directive": (
+            "TEMPLATE: MOTIVATIONAL MESSAGE.\n"
+            "- Build the whole video around one idea, shown through a specific real-life situation.\n"
+            "- End with one small action the viewer can take today.\n"
+            "- Tone: Sincere and grounded, not shouting or clichéd."
+        )
+    },
+    "meditation": {
+        "name": "Calm & Meditation",
+        "description": "Slow guided relaxation with long pauses and nature visuals.",
+        "default_scenes": 4,
+        "default_music": "ambient",
+        "default_grade": "warm_editorial",
+        "is_real": True,
+        "structure": [],
+        "director_directive": (
+            "TEMPLATE: CALM & MEDITATION.\n"
+            "- Use very short, unhurried sentences and gentle invitations about breath and body.\n"
+            "- Visual beats are slow natural scenes: water, forest, sky. No on-screen clutter.\n"
+            "- Make no medical claims.\n"
+            "- Tone: Soft, slow, reassuring."
         )
     }
 }

@@ -176,7 +176,7 @@ class AcceleratedAvatarEngine:
         stream_gen: bool = True,
     ) -> Path:
         """Invokes GVCLab/PersonaLive streamable portrait diffusion framework."""
-        personalive_root = Path(os.environ.get("PERSONALIVE_DIR", "/home/apravint/PersonaLive"))
+        personalive_root = Path(os.environ.get("PERSONALIVE_DIR", Path.home() / "PersonaLive"))
         if not personalive_root.exists() or not (personalive_root / "inference_offline.py").exists():
             raise FileNotFoundError(f"PersonaLive not found at {personalive_root}")
 
@@ -247,7 +247,7 @@ class AcceleratedAvatarEngine:
         height: int = 512,
     ) -> Path:
         """Unified entry point for talking head creation."""
-        personalive_root = Path(os.environ.get("PERSONALIVE_DIR", "/home/apravint/PersonaLive"))
+        personalive_root = Path(os.environ.get("PERSONALIVE_DIR", Path.home() / "PersonaLive"))
         has_personalive = personalive_root.exists() and (personalive_root / "inference_offline.py").exists()
 
         if engine == "personalive" or (engine == "auto" and has_personalive):

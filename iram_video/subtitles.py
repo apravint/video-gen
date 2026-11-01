@@ -159,7 +159,8 @@ class KineticSubtitleGenerator:
         out_ass_path: Path,
         is_shorts: bool = False,
         language: str = "en",
-        palette_key: str = "auto"
+        palette_key: str = "auto",
+        scene_overlap: float = 0.0
     ) -> Path:
         res_x = 1080 if is_shorts else 1920
         res_y = 1920 if is_shorts else 1080
@@ -209,7 +210,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             duration = float(scene.get("duration", 4.0))
             scene_start = timeline_cursor
             scene_end = scene_start + duration
-            timeline_cursor = scene_end
+            timeline_cursor = scene_end - scene_overlap
 
             # Emit clean lower-third chyron for the first 3.5 seconds of the scene
             heading = str(scene.get("heading") or "").strip()

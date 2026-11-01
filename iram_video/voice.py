@@ -142,6 +142,17 @@ class VoiceSynthesizer:
         word_timings = []
         audio_bytes = bytearray()
 
+        if not str(scene.get("narration") or "").strip():
+            # Scene with no speech: music and visuals only, for the length the author asked for
+            dur = max(0.5, float(scene.get("duration") or 4.0))
+            proc = await asyncio.create_subprocess_exec(
+                "ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=24000:cl=mono", "-t", f"{dur:.3f}", "-q:a", "9", str(out_mp3),
+                stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL
+            )
+            await proc.wait()
+            scene.update({"audio_file": str(out_mp3.resolve()), "duration": dur, "word_timings": [], "sentence_timings": []})
+            return scene
+
         active_voice = self.voice
         if scene.get("voice"):
             active_voice = VOICE_MAP.get(str(scene["voice"]).lower().strip(), scene["voice"])
@@ -187,6 +198,7 @@ class VoiceSynthesizer:
 
         # Silent audio fallback if completely offline
         if not out_mp3.exists() or out_mp3.stat().st_size == 0:
+            print(f"⚠️ [Voice] Speech synthesis failed for '{sid}'. This scene will be SILENT for 3 seconds.")
             fallback_cmd = [
                 "ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=24000:cl=mono",
                 "-t", "3.0", "-q:a", "9", str(out_mp3)

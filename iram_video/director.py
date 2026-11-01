@@ -32,17 +32,17 @@ For each scene, you provide:
      {"phrase": "the spoken sentence", "search_query": "3-5 word exact physical cinematography keywords describing real visible objects, human actions, or physical environments (e.g. 'boxer heavy bag workout', 'sprinter track starting blocks', 'mountain climber cliff sunrise', 'hands typing mechanical keyboard', 'ocean storm lighthouse waves'). ALWAYS use concrete physical nouns. NEVER output abstract ideas like 'fear mindset' or 'success habit'.", "ai_prompt": "Cinematic 8k photorealistic video description for AI video generators (Veo/Wan/Kling) describing camera motion, lighting, and action", "camera": "One of ['zoom_in', 'zoom_out', 'pan_left', 'pan_right'] (dynamic 2.5D camera choreography for this beat)"}
    ]
 6. "narration": The EXACT spoken voiceover script for the narrator.
-   - Natural, highly engaging, professional tone.
-   - Conversational, authoritative, no robotic fluff.
+   - Natural and engaging, in the tone that suits the subject and audience.
+   - No robotic fluff.
 
 Also provide:
 - "video_title": High-CTR, compelling YouTube video title (max 75 chars)
-- "theme_palette": Suggested color scheme:
-  - "bg": [r, g, b] (deep slate background, e.g. [15, 23, 42])
-  - "accent": [r, g, b] (primary clean accent, e.g. [59, 130, 246] or [37, 99, 235])
-  - "secondary": [r, g, b] (secondary neutral/amber, e.g. [148, 163, 184] or [245, 158, 11])
-  - "card_bg": [r, g, b] (slate card surface, e.g. [30, 41, 59])
-- "visual_policy": STRICT REQUIREMENT - AVOID all cyberpunk tropes, neon pink, magenta, or glowing green. Maintain clean, modern, professional enterprise aesthetics (Vox/Apple Keynote style).
+- "theme_palette": Color scheme chosen to suit this subject and mood:
+  - "bg": [r, g, b] (background)
+  - "accent": [r, g, b] (primary accent)
+  - "secondary": [r, g, b] (secondary color)
+  - "card_bg": [r, g, b] (card surface, must keep text legible)
+- "visual_policy": One sentence describing the look of this video, following the style requested by the user.
 - "soundscape":
   - "ambient_track": Suggested subtle ambient background (e.g. "mechanical_typing", "server_room", "subtle_rain", "subtle_wind", "room_tone")
   - "soundscape_playlist": Array of 1 to 3 audio texture layers, e.g. [{"type": "mechanical_typing", "volume": 0.12}]
@@ -67,15 +67,24 @@ FALLBACK_MODELS = [
     "gemini-3.1-pro-preview"
 ]
 
+LLM_TIMEOUT_MS = 120_000
+
 from .templates import get_template
+from .script_import import target_scene_count
+
+class DirectorUnavailable(RuntimeError):
+    """The LLM could not write a screenplay and placeholder content was not accepted."""
 
 class Director:
     def __init__(self, api_key: str = None, model: str = None):
         self.model = model
-        if api_key:
-            self.client = genai.Client(api_key=api_key)
-        else:
-            self.client = genai.Client()
+        # Bounded so a stalled connection fails over instead of hanging the whole render
+        http_options = types.HttpOptions(timeout=LLM_TIMEOUT_MS)
+        try:
+            self.client = genai.Client(api_key=api_key, http_options=http_options) if api_key else genai.Client(http_options=http_options)
+        except ValueError as e:
+            print(f"[Notice] Gemini is not configured ({e})")
+            self.client = None
 
     def direct(
         self,
@@ -87,17 +96,21 @@ class Director:
         is_cinema: bool = False,
         is_real: bool = False,
         character: str = None,
-        template: str = None
+        template: str = None,
+        duration_sec: float = None,
+        allow_offline: bool = True
     ) -> Dict[str, Any]:
         """Queries Google Gemini to outline and write the screenplay with multi-model fallback."""
         user_msg = f"User Prompt / Video Topic: {prompt}\n"
-        user_msg += (
-            "AESTHETIC & CAMERA DIRECTIVE:\n"
-            "- AVOID all cyberpunk tropes, neon pink, magenta, glowing acid green, or hacker stereotypes.\n"
-            "- Use clean, modern, professional editorial styling (deep slate, crisp white typography, subtle cobalt/warm amber accents).\n"
-            "- Camera motion must be subtle and steady (e.g. 'steady', 'zoom_in', 'zoom_out'). NO violent whipping or chaotic motion.\n"
-            "- For each scene, include a 'lower_third' object: {\"title\": \"Punchy Subject/Name\", \"subtitle\": \"Role/Context\"}.\n"
-        )
+        user_msg += "AESTHETIC & CAMERA DIRECTIVE:\n"
+        if style_hint:
+            user_msg += f"- The requested style below decides the look, tone and camera: follow it fully.\n"
+        else:
+            user_msg += (
+                "- Choose the look, tone and palette the subject calls for. If the topic names a style, follow it.\n"
+                "- With no style cue, prefer clean editorial styling and subtle, steady camera motion.\n"
+            )
+        user_msg += "- For each scene, include a 'lower_third' object: {\"title\": \"Punchy Subject/Name\", \"subtitle\": \"Role/Context\"}.\n"
 
         if template:
             tmpl_data = get_template(template, is_shorts=is_shorts)
@@ -112,7 +125,7 @@ class Director:
                 "- Write this screenplay like a high-retention, real YouTube documentary (Vox, Kurzgesagt, Johnny Harris, Veritasium style).\n"
                 "- Tone: Natural, intelligent, conversational, insightful, and cinematic.\n"
                 "- Real B-Roll Footage: Provide accurate 'search_query' keywords for real stock footage/photos for every scene.\n"
-                "- AVOID any cyberpunk, neon, or fictional matrix tropes. Focus on real-world concepts, science, history, tech, or nature.\n"
+                "- Focus on real, filmable subjects that stock or generated footage can show.\n"
             )
 
         if is_shorts:
@@ -141,6 +154,12 @@ class Director:
         if character:
             user_msg += f"- Animated Presenter / Character: An on-screen animated mascot/character ('{character}') co-hosts the video.\n"
         
+        if duration_sec:
+            scene_count = scene_count or target_scene_count(duration_sec)
+            user_msg += (
+                f"TARGET LENGTH: {int(duration_sec)} seconds of spoken audio, about {int(duration_sec * 2.4)} words of narration "
+                "in total across all scenes. This overrides any other pacing or word limit above.\n"
+            )
         if scene_count:
             user_msg += f"Target Scene Count: {scene_count} scenes.\n"
         if style_hint:
@@ -158,7 +177,9 @@ class Director:
             user_msg += "LANGUAGE REQUIREMENT: Produce the screenplay in English.\n"
 
         models_to_try = [self.model] if self.model else FALLBACK_MODELS
-        last_error = None
+        last_error = None if self.client else "no API key"
+        if not self.client:
+            models_to_try = []
 
         for m in models_to_try:
             try:
@@ -203,6 +224,13 @@ class Director:
                 print(f"[Notice] Model {m} unavailable ({e}), trying fallback...")
                 last_error = e
                 time.sleep(1)
+
+        if not allow_offline:
+            raise DirectorUnavailable(
+                f"Could not write a screenplay with Gemini ({last_error}).\n"
+                "Check GEMINI_API_KEY, or supply your own words with --script, "
+                "or pass --offline to accept a generic placeholder script that is not about your topic."
+            )
 
         print(f"⚠️ [Director] External Google Gemini quota exhausted ({last_error}). Directing offline procedural screenplay...")
         return self.generate_procedural_screenplay(

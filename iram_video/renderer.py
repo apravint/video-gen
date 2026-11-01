@@ -3,13 +3,39 @@ from pathlib import Path
 from typing import Dict, Any, List, Tuple
 from PIL import Image, ImageDraw, ImageFont
 
-FONT_EN_BOLD = "/home/apravint/.local/share/fonts/JetBrainsMono/JetBrainsMonoNerdFontPropo-Bold.ttf"
-FONT_EN_REG = "/home/apravint/.local/share/fonts/JetBrainsMono/JetBrainsMonoNerdFontPropo-Regular.ttf"
+from .mastering import resolve_dimensions
 
-FONT_TA_BOLD = "/usr/share/fonts/truetype/noto/NotoSansTamil-Bold.ttf"
-FONT_TA_REG = "/usr/share/fonts/truetype/noto/NotoSansTamil-Regular.ttf"
+_BUNDLED_FONTS = Path(__file__).resolve().parent.parent / "assets" / "fonts"
+_USER_FONTS = Path.home() / ".local" / "share" / "fonts"
 
-FONT_EMOJI = "/home/apravint/.local/share/fonts/SegoeUI/seguiemj.ttf"
+def _first_existing(*candidates) -> str:
+    """Returns the first font that exists, so rendering works beyond one machine's font setup."""
+    for c in candidates:
+        if Path(c).exists():
+            return str(c)
+    return str(candidates[-1])
+
+FONT_EN_BOLD = _first_existing(
+    _USER_FONTS / "JetBrainsMono/JetBrainsMonoNerdFontPropo-Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
+    "/Library/Fonts/Arial Bold.ttf",
+    "C:/Windows/Fonts/arialbd.ttf",
+    _BUNDLED_FONTS / "MuktaMalar-Bold.ttf",
+)
+FONT_EN_REG = _first_existing(
+    _USER_FONTS / "JetBrainsMono/JetBrainsMonoNerdFontPropo-Regular.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/TTF/DejaVuSans.ttf",
+    "/Library/Fonts/Arial.ttf",
+    "C:/Windows/Fonts/arial.ttf",
+    _BUNDLED_FONTS / "MuktaMalar-Bold.ttf",
+)
+
+FONT_TA_BOLD = _first_existing("/usr/share/fonts/truetype/noto/NotoSansTamil-Bold.ttf", _BUNDLED_FONTS / "MuktaMalar-Bold.ttf")
+FONT_TA_REG = _first_existing("/usr/share/fonts/truetype/noto/NotoSansTamil-Regular.ttf", _BUNDLED_FONTS / "MuktaMalar-Bold.ttf")
+
+FONT_EMOJI = _first_existing(_USER_FONTS / "SegoeUI/seguiemj.ttf", "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf")
 
 _EMOJI_FONT_CACHE: Dict[int, ImageFont.FreeTypeFont] = {}
 
@@ -135,17 +161,10 @@ def wrap_text(text: str, font_ta, font_en, max_width: int, draw: ImageDraw.Draw)
 
 class SlideRenderer:
     def __init__(self, theme: Dict[str, Any] = None, is_shorts: bool = False, aspect_ratio: str = "16:9", is_4k: bool = False):
-        self.is_shorts = is_shorts or (aspect_ratio == "9:16")
+        self.is_shorts = is_shorts or aspect_ratio in ("9:16", "4:5")
         self.aspect_ratio = aspect_ratio
         self.is_4k = is_4k
-        if aspect_ratio == "1:1":
-            self.width, self.height = (2160, 2160) if is_4k else (1080, 1080)
-        elif self.is_shorts:
-            self.width, self.height = (2160, 3840) if is_4k else (1080, 1920)
-        elif aspect_ratio == "2.39:1":
-            self.width, self.height = (3840, 1608) if is_4k else (2560, 1072)
-        else:
-            self.width, self.height = (3840, 2160) if is_4k else (1920, 1080)
+        self.width, self.height = resolve_dimensions(aspect_ratio, self.is_shorts, is_4k)
 
         theme = theme or {}
         self.bg_color = tuple(theme.get("bg", [15, 23, 42])) + (255,)
@@ -176,11 +195,6 @@ class SlideRenderer:
             draw.line([(0, self.height - 45), (self.width, self.height - 45)], fill=(30, 44, 70, 255), width=1)
             fta_bot, fen_bot = get_fonts(18, bold=False)
             draw_mixed_line(draw, 60, self.height - 34, video_title[:80], (120, 145, 180), fta_bot, fen_bot)
-            draw_mixed_line(draw, self.width - 240, self.height - 34, "IRAM AI Video", self.accent_color, fta_bot, fen_bot)
-        else:
-            draw.rectangle((60, 40, 300, 85), fill=(220, 38, 38))
-            fta_cat, fen_cat = get_fonts(18, bold=True)
-            draw_mixed_line(draw, 80, 52, "★ TECH SHORTS", (255, 255, 255), fta_cat, fen_cat)
 
         return img, draw
 
@@ -206,7 +220,13 @@ class SlideRenderer:
         heading = scene.get("heading", "OVERVIEW")
         subheading = scene.get("subheading", "")
         
-        if self.is_shorts:
+        cards = scene.get("cards", [])
+        has_card_content = any(c.get("bullets") or c.get("badge") for c in cards)
+        # The designed layouts are drawn in fixed 1080p coordinates; other frames use the scalable card.
+        native_frame = (self.width, self.height) in ((1920, 1080), (1080, 1920))
+        if not native_frame or scene.get("layout_type") == "text_card" or not has_card_content:
+            self._render_text_card(img, heading, subheading, cards)
+        elif self.is_shorts:
             self._render_vertical_shorts(img, scene, heading, subheading)
         else:
             fta_h, fen_h = get_fonts(44, bold=True)
@@ -215,7 +235,6 @@ class SlideRenderer:
             draw_mixed_line(draw, 100, 105, subheading[:95], self.accent_color, fta_sub, fen_sub)
 
             l_type = scene.get("layout_type", "pillars")
-            cards = scene.get("cards", [])
 
             if l_type == "comparison" or len(cards) == 2:
                 self._render_comparison(img, cards)
@@ -229,6 +248,51 @@ class SlideRenderer:
                 self._render_pillars(img, cards)
 
         img.save(out_path)
+
+    # --- SCALABLE TEXT CARD (ANY FRAME SIZE) ---
+    def _render_text_card(self, img: Image.Image, heading: str, subheading: str, cards: List[Dict[str, Any]]):
+        draw = ImageDraw.Draw(img)
+        unit = min(self.width, self.height) / 1080
+        max_w = int(self.width * 0.84)
+        margin = (self.width - max_w) // 2
+
+        fta_h, fen_h = get_fonts(int(76 * unit), bold=True)
+        fta_s, fen_s = get_fonts(int(38 * unit), bold=False)
+        fta_b, fen_b = get_fonts(int(32 * unit), bold=False)
+        h_step, s_step, b_step = int(92 * unit), int(52 * unit), int(46 * unit)
+
+        h_lines = wrap_text(heading, fta_h, fen_h, max_w, draw)[:3]
+        s_lines = wrap_text(subheading, fta_s, fen_s, max_w, draw)[:3] if subheading else []
+        b_lines = []
+        for card in cards[:3]:
+            for bullet in card.get("bullets", [])[:4]:
+                b_lines.extend(wrap_text(f"• {bullet}", fta_b, fen_b, max_w, draw))
+        b_lines = b_lines[:8]
+
+        rule_gap = int(36 * unit)
+        total = len(h_lines) * h_step + rule_gap * 2 + len(s_lines) * s_step + (rule_gap + len(b_lines) * b_step if b_lines else 0)
+        y = max(int(40 * unit), (self.height - total) // 2)
+
+        for line in h_lines:
+            line_w = get_mixed_width(line, fta_h, fen_h, draw)
+            draw_mixed_line(draw, (self.width - line_w) // 2, y, line, (255, 255, 255), fta_h, fen_h)
+            y += h_step
+
+        y += rule_gap // 2
+        rule_w = int(120 * unit)
+        draw.rectangle(((self.width - rule_w) // 2, y, (self.width + rule_w) // 2, y + max(3, int(5 * unit))), fill=self.accent_color)
+        y += rule_gap
+
+        for line in s_lines:
+            line_w = get_mixed_width(line, fta_s, fen_s, draw)
+            draw_mixed_line(draw, (self.width - line_w) // 2, y, line, self.sec_color, fta_s, fen_s)
+            y += s_step
+
+        if b_lines:
+            y += rule_gap
+            for line in b_lines:
+                draw_mixed_line(draw, margin, y, line, (215, 225, 240), fta_b, fen_b)
+                y += b_step
 
     # --- VERTICAL YOUTUBE SHORTS (9:16) LAYOUT ---
     def _render_vertical_shorts(self, img: Image.Image, scene: Dict[str, Any], heading: str, subheading: str):
@@ -267,62 +331,25 @@ class SlideRenderer:
             for bullet in card.get("bullets", [])[:2]:
                 wrapped = wrap_text(bullet, fta_bullet, fen_bullet, card_w - 40, cdraw)
                 for w in wrapped:
-                    draw_mixed_line(cdraw, ib[0], by, f"⚡ {w}", (190, 215, 240), fta_bullet, fen_bullet)
+                    draw_mixed_line(cdraw, ib[0], by, f"• {w}", (190, 215, 240), fta_bullet, fen_bullet)
                     by += 36
                 by += 16
 
-            # Terminal / Code Simulation Box in Lower-Middle Area
-            term_y = start_y + card_h + 35
-            term_h = 440
-            draw.rectangle([(60, term_y), (60 + card_w, term_y + term_h)], fill=(15, 23, 42), outline=(51, 65, 85), width=2)
-            draw.rectangle([(60, term_y), (60 + card_w, term_y + 44)], fill=(30, 41, 59))
-            draw.line([(60, term_y + 44), (60 + card_w, term_y + 44)], fill=(51, 65, 85), width=1)
+            # Terminal window only for scenes that really show commands
+            if scene.get("layout_type") == "code_or_terminal":
+                term_y = start_y + card_h + 35
+                term_h = 440
+                draw.rectangle([(60, term_y), (60 + card_w, term_y + term_h)], fill=(15, 23, 42), outline=(51, 65, 85), width=2)
+                draw.rectangle([(60, term_y), (60 + card_w, term_y + 44)], fill=(30, 41, 59))
+                draw.line([(60, term_y + 44), (60 + card_w, term_y + 44)], fill=(51, 65, 85), width=1)
 
-            # Window controls
-            draw.ellipse([(80, term_y + 14), (96, term_y + 30)], fill=(100, 116, 139))
-            draw.ellipse([(108, term_y + 14), (124, term_y + 30)], fill=(148, 163, 184))
-            draw.ellipse([(136, term_y + 14), (152, term_y + 30)], fill=(203, 213, 225))
-
-            fta_tt, fen_tt = get_fonts(18, bold=True)
-            draw_mixed_line(draw, 170, term_y + 12, "termux ~ bash (Android Linux)", (148, 163, 184), fta_tt, fen_tt)
-
-            # Realistic CLI commands based on scene
-            h_low = heading.lower()
-            if any(k in h_low for k in ["start", "intro", "mobile", "full", "linux"]):
-                c_lines = [
-                    ("$ termux-setup-storage", (56, 189, 248)),
-                    ("[✓] Storage access granted (/sdcard)", (148, 163, 184)),
-                    ("$ uname -m", (56, 189, 248)),
-                    ("aarch64 (Linux 5.15-android)", (203, 213, 225)),
-                    ("$ echo 'Linux on mobile is ready'", (56, 189, 248)),
-                    ("Linux on mobile is ready", (248, 250, 252))
-                ]
-            elif any(k in h_low for k in ["pack", "tool", "apt", "pkg", "install"]):
-                c_lines = [
-                    ("$ pkg update -y && pkg upgrade", (56, 189, 248)),
-                    ("[✓] 1,420 packages updated", (148, 163, 184)),
-                    ("$ pkg install python git openssh neovim", (56, 189, 248)),
-                    ("[✓] Installed Python 3.12, Git 2.44, Neovim", (148, 163, 184)),
-                    ("$ python -c \"print('Hello from Android')\"", (56, 189, 248)),
-                    ("Hello from Android", (245, 158, 11))
-                ]
-            else:
-                c_lines = [
-                    ("$ git clone https://github.com/app/server", (56, 189, 248)),
-                    ("$ python -m http.server 8080", (56, 189, 248)),
-                    ("[⚡] Serving HTTP on 0.0.0.0 port 8080...", (148, 163, 184)),
-                    ("$ ssh admin@production-cloud", (56, 189, 248)),
-                    ("Welcome to Ubuntu 26.04 LTS (GNU/Linux)", (203, 213, 225)),
-                    ("System load: 0.12, Memory: 64% used", (148, 163, 184))
-                ]
-
-            ty = term_y + 70
-            fta_cmd, fen_cmd = get_fonts(24, bold=False)
-            fta_cmd_b, fen_cmd_b = get_fonts(24, bold=True)
-            for cmd_text, cmd_col in c_lines:
-                f_use = fen_cmd_b if cmd_text.startswith("$") else fen_cmd
-                draw_mixed_line(draw, 85, ty, cmd_text, cmd_col, fta_cmd, f_use)
-                ty += 40
+                ty = term_y + 70
+                fta_cmd, fen_cmd = get_fonts(24, bold=False)
+                for cmd_text in [scene.get("code"), scene.get("command")]:
+                    if cmd_text:
+                        for code_line in str(cmd_text).splitlines()[:8]:
+                            draw_mixed_line(draw, 85, ty, code_line, (56, 189, 248), fta_cmd, fen_cmd)
+                            ty += 40
         else:
             num_cards = min(2, len(cards))
             total_avail_h = 1000
@@ -347,7 +374,7 @@ class SlideRenderer:
                 for bullet in card.get("bullets", [])[:2]:
                     wrapped = wrap_text(bullet, fta_bullet, fen_bullet, card_w - 40, cdraw)
                     for w in wrapped:
-                        draw_mixed_line(cdraw, ib[0], by, f"⚡ {w}", (190, 215, 240), fta_bullet, fen_bullet)
+                        draw_mixed_line(cdraw, ib[0], by, f"• {w}", (190, 215, 240), fta_bullet, fen_bullet)
                         by += 36
                     by += 16
 
@@ -436,21 +463,27 @@ class SlideRenderer:
 
     def _render_hero_metric(self, img: Image.Image, cards: List[Dict[str, Any]]):
         card1 = cards[0] if cards else {}
-        ib1 = self.draw_card_frame(img, (100, 180, 720, 880), card1.get("title", "HIGHLIGHT"), "", border_color=self.accent_color)
+        # A single card takes the full width rather than sitting beside an empty box
+        right_edge = 720 if len(cards) > 1 else self.width - 100
+        ib1 = self.draw_card_frame(img, (100, 180, right_edge, 880), card1.get("title", ""), "", border_color=self.accent_color)
         c1_draw = ImageDraw.Draw(img)
         fta_hero, fen_hero = get_fonts(60, bold=True)
-        draw_mixed_line(c1_draw, ib1[0] + 20, ib1[1] + 40, card1.get("badge", "★ 100%"), self.accent_color, fta_hero, fen_hero)
-        hy = ib1[1] + 160
-        fta_b, fen_b = get_fonts(18, bold=False)
+        hy = ib1[1] + 40
+        if card1.get("badge"):
+            draw_mixed_line(c1_draw, ib1[0] + 20, hy, card1["badge"], self.accent_color, fta_hero, fen_hero)
+            hy += 120
+        fta_b, fen_b = get_fonts(18 if len(cards) > 1 else 34, bold=False)
         for b in card1.get("bullets", []):
-            wrapped = wrap_text(b, fta_b, fen_b, 540, c1_draw)
+            wrapped = wrap_text(b, fta_b, fen_b, right_edge - 180, c1_draw)
             for w in wrapped:
                 draw_mixed_line(c1_draw, ib1[0] + 20, hy, f"• {w}", (190, 215, 240), fta_b, fen_b)
-                hy += 26
+                hy += 26 if len(cards) > 1 else 48
             hy += 14
 
-        card2 = cards[1] if len(cards) > 1 else {}
-        ib2 = self.draw_card_frame(img, (760, 180, self.width - 100, 880), card2.get("title", "BREAKDOWN"), card2.get("subtitle", ""), border_color=self.sec_color)
+        if len(cards) < 2:
+            return
+        card2 = cards[1]
+        ib2 = self.draw_card_frame(img, (760, 180, self.width - 100, 880), card2.get("title", ""), card2.get("subtitle", ""), border_color=self.sec_color)
         c2_draw = ImageDraw.Draw(img)
         ry = ib2[1]
         for b in card2.get("bullets", []):

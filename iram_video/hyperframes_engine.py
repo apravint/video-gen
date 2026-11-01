@@ -190,7 +190,7 @@ class HyperframesEngine:
         """Locates the hyperframes CLI runner if installed on system."""
         candidates = [
             shutil.which("hyperframes"),
-            Path("/home/apravint/hyperframes/packages/cli/bin/hyperframes.js"),
+            Path.home() / "hyperframes/packages/cli/bin/hyperframes.js",
             Path.home() / ".local/bin/hyperframes",
             Path.home() / ".local/share/craft-suite/hyperframes.AppImage"
         ]

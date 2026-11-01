@@ -26,7 +26,7 @@ from .templates import VIDEO_TEMPLATES, list_templates
 from .state_machine import StateMachineAssetBuilder, AssetRenderState
 
 logger = logging.getLogger("iram_video.api")
-OUTPUTS_DIR = Path(os.getenv("IRAM_OUTPUTS_DIR", "/home/apravint"))
+OUTPUTS_DIR = Path(os.getenv("IRAM_OUTPUTS_DIR", Path.home()))
 
 
 # ---------------------------------------------------------

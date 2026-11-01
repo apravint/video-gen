@@ -3,7 +3,7 @@
 An autonomous, production-grade video generation engine that transforms **any natural language prompt, technical codebase, or screenplay into broadcast-quality 1080p MP4 videos, YouTube Shorts, cinema trailers, and animated short films**.
 
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-69%20passed-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg)](tests/)
 [![CI](https://github.com/apravint/video-gen/actions/workflows/ci.yml/badge.svg)](https://github.com/apravint/video-gen/actions)
 [![Bilingual](https://img.shields.io/badge/languages-English%20%7C%20%E0%AE%A4%E0%AE%AE%E0%AE%BF%E0%AE%B4%E0%AF%8D-purple.svg)]()
 
@@ -118,6 +118,35 @@ video-gen "Cyberpunk detective in rainy Neo-Tokyo" --generator wan2.2
 video-gen "Ancient temple at sunrise" --generator hunyuan
 ```
 
+### 6. Any Genre, Any Length, Any Style
+```bash
+# 16 genres: see them all with --list-templates
+video-gen "Tamil style lemon rice" --template recipe --duration 60
+video-gen "The last lighthouse keeper" --template story --style "moody gothic, slow camera" --cinema
+video-gen "Counting with farm animals" --template kids --aspect-ratio 4:5 --graphics
+```
+
+### 7. Your Own Words and Footage (no LLM key needed)
+```bash
+# Plain text: blank lines separate scenes, '# Heading' names a scene. Words are spoken verbatim.
+video-gen --script story.txt --subtitles
+
+# Your own photos and clips. Filenames matching the narration are chosen first.
+video-gen --script story.txt --media ./wedding-photos --music acoustic
+
+# Visuals and music only, for a set length
+video-gen "Summer 2026" --media ./holiday --no-voice --duration 45 --bg-music song.mp3
+```
+
+### 8. Review the Script Before Rendering
+```bash
+video-gen "History of the bicycle" --template history --plan bicycle.json
+# Edit bicycle.json, then:
+video-gen --script bicycle.json
+```
+
+In a screenplay JSON only `narration` is required per scene. Use `duration` instead for a scene with no speech.
+
 ---
 
 ## 🎛️ CLI Options
@@ -125,6 +154,16 @@ video-gen "Ancient temple at sunrise" --generator hunyuan
 | Argument | Description | Default |
 | :--- | :--- | :--- |
 | `prompt` | Topic, brief, or script in English or Tamil | — |
+| `--template` | Genre: `explainer`, `tutorial`, `listicle`, `comparison`, `news`, `promo`, `podcast`, `story`, `kids`, `travel`, `recipe`, `fitness`, `review`, `history`, `motivation`, `meditation` | `None` |
+| `--style` | Free-form look and tone. It takes priority over the default editorial look | `None` |
+| `--duration` | Approximate target length in seconds | auto |
+| `--script` | Your own plain-text script or screenplay JSON. Needs no LLM | `None` |
+| `--plan` | Write the screenplay to an editable JSON file and stop | `None` |
+| `--media` | Folder of your own images and clips, used instead of stock or AI footage | `None` |
+| `--no-voice` | No narration: visuals and music only | `False` |
+| `--graphics` | Force designed slides instead of footage | `False` |
+| `--aspect-ratio` | `16:9`, `9:16`, `1:1`, `4:5`, `2.39:1` | `auto` |
+| `--offline` | If Gemini is unavailable, accept a generic placeholder script that is not about your topic | `False` |
 | `--brag` | Inspect a local codebase/repo and build a developer launch showcase | `None` |
 | `--recipe` | Shotcraft cinematic recipe card (`hero_reveal`, `speed_ramp`, `macro_orbit`, etc.) | `None` |
 | `--avatar` | Path to portrait image for digital human talking avatar PiP | `None` |
